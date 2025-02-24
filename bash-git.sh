@@ -25,7 +25,13 @@ BASHGIT_UPDATE_PS1() {
 
     # number of background processes
     # local njobs=$(jobs -p | wc -l)
+    # TODO: save output to variable without creating subprocess
+
+    # jobs -p >&5; read -ra x <&5; echo $x
+
     local njobs=($(jobs -p))
+    # jobs -p >&5
+    # read -ra njobs <&5
     njobs=${#njobs[@]}
     [ $njobs -gt 0 ] && PS1+="\[\033[33m\][$njobs]$COLOR_0 "
 
@@ -95,8 +101,10 @@ BASHGIT_UPDATE_PS1() {
     fi
 
     # current directory
-    local d="$(dirs +0)"
-    PS1+="${d//\//$COLOR_GREY/$COLOR_0}"
+    local cwd="$PWD"
+    [[ "$cwd" =~ ^"$HOME"(/|$) ]] && cwd="~${cwd#$HOME}"
+    # grey slashes
+    PS1+="${cwd//\//$COLOR_GREY/$COLOR_0}"
 
     # prompt
     local pid=$$
