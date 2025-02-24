@@ -1,0 +1,179 @@
+#!/usr/bin/bash
+
+COLOR_0='\[\033[0m\]'
+COLOR_GREY='\[\033[1;90m\]'
+
+_trap_DEBUG() {
+    # save current $SECONDS value
+    _PREV_SECONDS=${_PREV_SECONDS:-$SECONDS}
+}
+trap _trap_DEBUG DEBUG # execute before every command
+
+# PS0: expanded and displayed after reading a command but before the command is executed
+PS0="$COLOR_GREY└ \D{%I:%M%P}$COLOR_0\n"
+
+BASHGIT_UPDATE_PS1() {
+    local prev_duration=$(($SECONDS - $_PREV_SECONDS))
+    unset _PREV_SECONDS
+
+    PS1="$COLOR_GREY┌$COLOR_0 "
+
+    # previous command duration
+    if (( prev_duration > 1 )); then
+        PS1="\n$COLOR_GREY$prev_duration s$COLOR_0\n$PS1"
+    fi
+
+    # number of background processes
+    # local njobs=$(jobs -p | wc -l)
+    local njobs=($(jobs -p))
+    njobs=${#njobs[@]}
+    [ $njobs -gt 0 ] && PS1+="\[\033[33m\][$njobs]$COLOR_0 "
+
+    # git
+    unset BASHGIT_GIT BASHGIT_SUPER BASHGIT_HASH BASHGIT_BRANCH BASHGIT_ORIGIN
+    BASHGIT_REPO="$PWD"
+    while [ -n "$BASHGIT_REPO" ]; do # look for .git
+        BASHGIT_GIT="$BASHGIT_REPO/.git"
+        if [ -d "$BASHGIT_GIT" ]; then # if .git is a directory
+            break
+        elif [ -f "$BASHGIT_GIT" ]; then # if .git is a file
+            # this is a submodule
+            local re_gitdir='^gitdir:[[:space:]]*((.*)/\.git.*)'
+            if [[ "$(< "$BASHGIT_GIT")" =~ $re_gitdir ]]; then
+                BASHGIT_GIT="$BASHGIT_REPO/${BASH_REMATCH[1]}"
+                BASHGIT_SUPER="$BASHGIT_REPO/${BASH_REMATCH[2]}"
+            else
+                unset BASHGIT_REPO BASHGIT_GIT
+            fi
+            break
+        fi
+        BASHGIT_REPO=${BASHGIT_REPO%/*} # go one directory level deeper
+    done
+
+    if [ -z "$BASHGIT_REPO" ]; then
+        unset BASHGIT_REPO BASHGIT_GIT
+    else # this is a git repo
+        # head hash and branch
+        BASHGIT_HASH="$(< "$BASHGIT_GIT/HEAD")"
+        local re_ref='^ref:[[:space:]]*(refs/heads/(.+))'
+        if [[ "$BASHGIT_HASH" =~ $re_ref ]]; then
+            BASHGIT_BRANCH="${BASH_REMATCH[2]}"
+            local ref="$BASHGIT_GIT/${BASH_REMATCH[1]}"
+            if [ -f "$ref" ]; then
+                BASHGIT_HASH="$(< "$ref")"
+            else
+                BASHGIT_HASH=""
+            fi
+        fi
+
+        if [ -n "$BASHGIT_HASH" ]; then
+            local color='31'
+            local commit="${BASHGIT_HASH:0:7}"
+            if [ -n "$BASHGIT_BRANCH" ]; then
+                color='32'
+                commit+=" $BASHGIT_BRANCH"
+            fi
+            PS1+="\[\033[${color}m\]$commit$COLOR_0 "
+        fi
+
+        # indicate if currently in a submodule
+        # [ -v BASHGIT_SUPER ] && PS1+="\[\033[33m\]sub$COLOR_0 "
+
+        # git config --get remote.origin.url
+        local re_origin='^\[remote "origin"\]'
+        local re_url='^[[:space:]]*url[[:space:]]*=.*//[^/]+/(.+)\.git$'
+        local line
+        while IFS=$'\n' read -r line; do
+            if [ -v re_origin ]; then
+                [[ "$line" =~ $re_origin ]] && unset re_origin
+            elif [[ "$line" =~ $re_url ]]; then
+                BASHGIT_ORIGIN="${BASH_REMATCH[1]}"
+                PS1+="\[\033[35m\]$BASHGIT_ORIGIN$COLOR_0 "
+                break
+            fi
+        done < "$BASHGIT_GIT/config"
+    fi
+
+    # current directory
+    local d="$(dirs +0)"
+    PS1+="${d//\//$COLOR_GREY/$COLOR_0}"
+
+    # prompt
+    local pid=$$
+    local prompt_symbol='├'
+    while [ "$pid" != '1' ]; do
+        prompt_symbol+='\$'
+        pid="$(< "/proc/$pid/ppid")"
+    done
+    PS1+="\n$COLOR_GREY$prompt_symbol$COLOR_0 "
+
+    # set terminal window title
+    PS1="\[\033]0;${BASHGIT_ORIGIN:-Git Bash}\007\]$PS1"
+}
+
+PROMPT_COMMAND=BASHGIT_UPDATE_PS1
+
+sm() { # navigate git submodules with fzf
+    [ -z "$BASHGIT_REPO" ] && return 1
+
+    local repo="${BASHGIT_SUPER:-$BASHGIT_REPO}"
+    local modules="$repo/.gitmodules"
+    [ -f "$modules" ] || return 1
+
+    # TODO: go into submodules of submodules
+
+    modules="$(awk '
+        match($0, /^\[submodule\s+"([^"]+)"/, m) {
+            if (NR>1) { printf "\n" }
+            printf "%s", m[1];
+            next
+        }
+        match($0, /^\s*path\s*=\s*(.*)/, m) {
+            printf " %s", m[1];
+            next
+        }
+        END {
+            printf "\n"
+        }' "$modules" | sort | fzf -i -q "$1")"
+
+    [ -n "$modules" ] && cd "$repo/${modules##* }"
+}
+
+topic() {
+    [ $# -gt 1 ] || [ -z "$BASHGIT_REPO" ] && return 1
+
+    local line path branch
+    local branch="$BASHGIT_BRANCH"
+    if [ -z "$branch" ]; then
+        # HEAD does not point to a branch
+        [ -z "$BASHGIT_SUPER" ] && return 1 # no super repo
+
+        # Get branch name from .gitmodules
+        while IFS=$'\n' read -r line; do
+            if [[ "$line" =~ ^\[submodule[[:space:]] ]]; then
+                if [ -n "$path" ] && [ "$BASHGIT_SUPER/$path" -ef "$BASHGIT_REPO" ]; then
+                    unset path
+                    break
+                else
+                    unset path branch
+                fi
+            elif [[ "$line" =~ ^[[:space:]]*(path|branch)[[:space:]]*=[[:space:]]*(.+) ]]; then
+                declare "${BASH_REMATCH[1]}=${BASH_REMATCH[2]}"
+            fi
+        done < "$BASHGIT_SUPER/.gitmodules"
+        if ! [ -n "$path" ] && [ "$BASHGIT_SUPER/$path" -ef "$BASHGIT_REPO" ]; then
+            unset branch
+        fi
+        unset path
+    fi
+
+    if [[ "$branch" =~ ^topic/(.+)/.+ ]]; then
+        branch="${BASH_REMATCH[1]}"
+    fi
+
+    if [ $# -eq 1 ]; then
+        git switch -c "topic/$branch/$1"
+    else
+        echo "git switch -c topic/$branch/"
+    fi
+}
