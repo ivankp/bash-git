@@ -87,7 +87,7 @@ BASHGIT_UPDATE_PS1() {
 
         # git config --get remote.origin.url
         local re_origin='^\[remote "origin"\]'
-        local re_url='^[[:space:]]*url[[:space:]]*=.*//[^/]+/(.+)\.git$'
+        local re_url='^[[:space:]]*url[[:space:]]*=.*/(([^/]+/)?[^/]+)\.git$'
         local line
         while IFS=$'\n' read -r line; do
             if [ -v re_origin ]; then
