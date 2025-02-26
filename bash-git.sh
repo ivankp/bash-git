@@ -80,13 +80,13 @@ BASHGIT_UPDATE_PS1() {
 
         # git config --get remote.origin.url
         local re_origin='^\[remote "origin"\]'
-        local re_url='^[[:space:]]*url[[:space:]]*=.*/(([^/]+/)?[^/]+)\.git$'
+        local re_url='^[[:space:]]*url[[:space:]]*=[[:space:]]*(.+)\.git$'
         local line
         while IFS=$'\n' read -r line; do
             if [ -v re_origin ]; then
                 [[ "$line" =~ $re_origin ]] && unset re_origin
-            elif [[ "$line" =~ $re_url ]]; then
-                BASHGIT_ORIGIN="${BASH_REMATCH[1]}"
+            elif [[ "$line" =~ $re_url ]] && [[ "${BASH_REMATCH[1]}" =~ ([^/]+/)?[^/]+$ ]]; then
+                BASHGIT_ORIGIN="${BASH_REMATCH[0]}"
                 PS1+="\[\033[35m\]$BASHGIT_ORIGIN$COLOR_0 "
                 break
             fi
