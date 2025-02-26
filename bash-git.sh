@@ -12,6 +12,8 @@ trap _trap_DEBUG DEBUG # execute before every command
 # PS0: expanded and displayed after reading a command but before the command is executed
 PS0="$COLOR_GREY└ \D{%I:%M%P}$COLOR_0\n"
 
+_BASHGIT_NJOBS0=''
+
 BASHGIT_UPDATE_PS1() {
     local prev_duration=$(($SECONDS - $_PREV_SECONDS))
     unset _PREV_SECONDS
@@ -24,16 +26,7 @@ BASHGIT_UPDATE_PS1() {
     fi
 
     # number of background processes
-    # local njobs=$(jobs -p | wc -l)
-    # TODO: save output to variable without creating subprocess
-
-    # jobs -p >&5; read -ra x <&5; echo $x
-
-    local njobs=($(jobs -p))
-    # jobs -p >&5
-    # read -ra njobs <&5
-    njobs=${#njobs[@]}
-    [ $njobs -gt 0 ] && PS1+="\[\033[33m\][$njobs]$COLOR_0 "
+    PS1+='${_BASHGIT_NJOBS\j-\[\033[33m\][\j]\[\033[0m\] }'
 
     # git
     unset BASHGIT_GIT BASHGIT_SUPER BASHGIT_HASH BASHGIT_BRANCH BASHGIT_ORIGIN
