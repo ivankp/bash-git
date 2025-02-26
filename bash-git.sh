@@ -1,5 +1,11 @@
 #!/usr/bin/bash
 
+# PS1 \ variables documentation:
+# https://man7.org/linux/man-pages/man1/bash.1.html#PROMPTING
+
+# Shell Parameter Expansion documentation:
+# https://www.gnu.org/software/bash/manual/html_node/Shell-Parameter-Expansion.html
+
 COLOR_0='\[\033[0m\]'
 COLOR_GREY='\[\033[1;90m\]'
 
@@ -12,6 +18,8 @@ trap _trap_DEBUG DEBUG # execute before every command
 # PS0: expanded and displayed after reading a command but before the command is executed
 PS0="$COLOR_GREY└ \D{%I:%M%P}$COLOR_0\n"
 
+# trick to not print anything if \j resolves to 0 in PS1
+# using bash parameter substitution
 _BASHGIT_NJOBS0=''
 
 BASHGIT_UPDATE_PS1() {
@@ -65,6 +73,7 @@ BASHGIT_UPDATE_PS1() {
             fi
         fi
 
+        # add short hash to PS1
         if [ -n "$BASHGIT_HASH" ]; then
             local color='31'
             local commit="${BASHGIT_HASH:0:7}"
@@ -78,6 +87,7 @@ BASHGIT_UPDATE_PS1() {
         # indicate if currently in a submodule
         # [ -v BASHGIT_SUPER ] && PS1+="\[\033[33m\]sub$COLOR_0 "
 
+        # get git origin remote name
         # git config --get remote.origin.url
         local re_origin='^\[remote "origin"\]'
         local re_url='^[[:space:]]*url[[:space:]]*=[[:space:]]*(.+)\.git$'
@@ -100,6 +110,7 @@ BASHGIT_UPDATE_PS1() {
     PS1+="${cwd//\//$COLOR_GREY/$COLOR_0}"
 
     # prompt
+    # count how many child processes we are from the original bash process
     local pid=$$
     local prompt_symbol='├'
     while [ "$pid" != '1' ]; do
