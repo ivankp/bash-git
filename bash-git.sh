@@ -16,7 +16,7 @@ _trap_DEBUG() {
 trap _trap_DEBUG DEBUG # execute before every command
 
 # PS0: expanded and displayed after reading a command but before the command is executed
-PS0="$COLOR_GREY└ \D{%I:%M%P}$COLOR_0\n"
+PS0="$COLOR_GREY└ \D{%I:%M:%S %P}$COLOR_0\n"
 
 # trick to not print anything if \j resolves to 0 in PS1
 # using bash parameter substitution
@@ -134,6 +134,7 @@ sm() { # navigate git submodules with fzf
 
     # TODO: go into submodules of submodules
 
+    # TODO: rewrite awk script in bash
     modules="$(awk '
         match($0, /^\[submodule\s+"([^"]+)"/, m) {
             if (NR>1) { printf "\n" }
