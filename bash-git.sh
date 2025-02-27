@@ -37,7 +37,7 @@ BASHGIT_UPDATE_PS1() {
     PS1+='${_BASHGIT_NJOBS\j-\[\033[33m\][\j]\[\033[0m\] }'
 
     # git
-    unset BASHGIT_GIT BASHGIT_SUPER BASHGIT_HASH BASHGIT_BRANCH BASHGIT_ORIGIN
+    unset BASHGIT_GIT BASHGIT_SUPER BASHGIT_HASH BASHGIT_BRANCH BASHGIT_ORIGIN BASHGIT_ORIGIN_SHORT
     BASHGIT_REPO="$PWD"
     while [ -n "$BASHGIT_REPO" ]; do # look for .git
         BASHGIT_GIT="$BASHGIT_REPO/.git"
@@ -90,14 +90,17 @@ BASHGIT_UPDATE_PS1() {
         # get git origin remote name
         # git config --get remote.origin.url
         local re_origin='^\[remote "origin"\]'
-        local re_url='^[[:space:]]*url[[:space:]]*=[[:space:]]*(.+)\.git$'
+        local re_url='^[[:space:]]*url[[:space:]]*=[[:space:]]*(.+)'
         local line
         while IFS=$'\n' read -r line; do
             if [ -v re_origin ]; then
                 [[ "$line" =~ $re_origin ]] && unset re_origin
-            elif [[ "$line" =~ $re_url ]] && [[ "${BASH_REMATCH[1]}" =~ ([^/]+/)?[^/]+$ ]]; then
-                BASHGIT_ORIGIN="${BASH_REMATCH[0]}"
-                PS1+="\[\033[35m\]$BASHGIT_ORIGIN$COLOR_0 "
+            elif [[ "$line" =~ $re_url ]]; then
+                BASHGIT_ORIGIN="${BASH_REMATCH[1]}"
+                if [[ "$BASHGIT_ORIGIN" =~ (([^/]+/)?[^/]+)\.git$ ]]; then
+                    BASHGIT_ORIGIN_SHORT="${BASH_REMATCH[1]}"
+                    PS1+="\[\033[35m\]$BASHGIT_ORIGIN_SHORT$COLOR_0 "
+                fi
                 break
             fi
         done < "$BASHGIT_GIT/config"
@@ -120,7 +123,7 @@ BASHGIT_UPDATE_PS1() {
     PS1+="\n$COLOR_GREY$prompt_symbol$COLOR_0 "
 
     # set terminal window title
-    PS1="\[\033]0;${BASHGIT_ORIGIN:-Git Bash}\007\]$PS1"
+    PS1="\[\033]0;${BASHGIT_ORIGIN_SHORT:-Git Bash}\007\]$PS1"
 }
 
 PROMPT_COMMAND=BASHGIT_UPDATE_PS1
