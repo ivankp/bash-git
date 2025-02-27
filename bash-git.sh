@@ -37,7 +37,7 @@ BASHGIT_UPDATE_PS1() {
     PS1+='${_BASHGIT_NJOBS\j-\[\033[33m\][\j]\[\033[0m\] }'
 
     # git
-    unset BASHGIT_GIT BASHGIT_SUPER BASHGIT_HASH BASHGIT_BRANCH BASHGIT_ORIGIN BASHGIT_ORIGIN_SHORT
+    unset BASHGIT_{GIT,SUPER,HASH,BRANCH,ORIGIN,ORIGIN_SHORT}
     BASHGIT_REPO="$PWD"
     while [ -n "$BASHGIT_REPO" ]; do # look for .git
         BASHGIT_GIT="$BASHGIT_REPO/.git"
@@ -50,7 +50,7 @@ BASHGIT_UPDATE_PS1() {
                 BASHGIT_GIT="$BASHGIT_REPO/${BASH_REMATCH[1]}"
                 BASHGIT_SUPER="$BASHGIT_REPO/${BASH_REMATCH[2]}"
             else
-                unset BASHGIT_REPO BASHGIT_GIT
+                unset BASHGIT_{REPO,GIT}
             fi
             break
         fi
@@ -58,7 +58,7 @@ BASHGIT_UPDATE_PS1() {
     done
 
     if [ -z "$BASHGIT_REPO" ]; then
-        unset BASHGIT_REPO BASHGIT_GIT
+        unset BASHGIT_{REPO,GIT}
     else # this is a git repo
         # head hash and branch
         BASHGIT_HASH="$(< "$BASHGIT_GIT/HEAD")"
@@ -69,7 +69,7 @@ BASHGIT_UPDATE_PS1() {
             if [ -f "$ref" ]; then
                 BASHGIT_HASH="$(< "$ref")"
             else
-                BASHGIT_HASH=""
+                BASHGIT_HASH=''
             fi
         fi
 
