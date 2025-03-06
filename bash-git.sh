@@ -45,7 +45,7 @@ BASHGIT_UPDATE_PS1() {
             break
         elif [ -f "$BASHGIT_GIT" ]; then # if .git is a file
             # this is a submodule
-            local re_gitdir='^gitdir:[[:space:]]*((.*)/\.git.*)'
+            local re_gitdir='^gitdir:[[:blank:]]*((.*)/\.git.*)'
             if [[ "$(< "$BASHGIT_GIT")" =~ $re_gitdir ]]; then
                 BASHGIT_GIT="$BASHGIT_REPO/${BASH_REMATCH[1]}"
                 BASHGIT_SUPER="$BASHGIT_REPO/${BASH_REMATCH[2]}"
@@ -62,7 +62,7 @@ BASHGIT_UPDATE_PS1() {
     else # this is a git repo
         # head hash and branch
         BASHGIT_HASH="$(< "$BASHGIT_GIT/HEAD")"
-        local re_ref='^ref:[[:space:]]*(refs/heads/(.+))'
+        local re_ref='^ref:[[:blank:]]*(refs/heads/(.+))'
         if [[ "$BASHGIT_HASH" =~ $re_ref ]]; then
             BASHGIT_BRANCH="${BASH_REMATCH[2]}"
             local ref="$BASHGIT_GIT/${BASH_REMATCH[1]}"
@@ -89,8 +89,8 @@ BASHGIT_UPDATE_PS1() {
 
         # get git origin remote name
         # git config --get remote.origin.url
-        local re_origin='^\[remote "origin"\]'
-        local re_url='^[[:space:]]*url[[:space:]]*=[[:space:]]*(.+)'
+        local re_origin='^\[remote[[:blank:]]+"origin"\]'
+        local re_url='^[[:blank:]]*url[[:blank:]]*=[[:blank:]]*(.+)'
         local line
         while IFS=$'\n' read -r line; do
             if [ -v re_origin ]; then
@@ -137,14 +137,13 @@ sm() { # navigate git submodules with fzf
 
     # TODO: go into submodules of submodules
 
-    # TODO: rewrite awk script in bash
     modules="$(awk '
-        match($0, /^\[submodule\s+"([^"]+)"/, m) {
+        match($0, /^\[submodule[[:blank:]]+"([^"]+)"\]/, m) {
             if (NR>1) { printf "\n" }
             printf "%s", m[1];
             next
         }
-        match($0, /^\s*path\s*=\s*(.*)/, m) {
+        match($0, /^[[:blank:]]*path[[:blank:]]*=[[:blank:]]*(.+)/, m) {
             printf " %s", m[1];
             next
         }
@@ -158,25 +157,27 @@ sm() { # navigate git submodules with fzf
 topic() {
     [ $# -gt 1 ] || [ -z "$BASHGIT_REPO" ] && return 1
 
-    local line path branch
     local branch="$BASHGIT_BRANCH"
     if [ -z "$branch" ]; then
         # HEAD does not point to a branch
         [ -z "$BASHGIT_SUPER" ] && return 1 # no super repo
 
         # Get branch name from .gitmodules
+        local line path
+        local re_submodule='^\[submodule[[:blank:]]'
+        local re_value='^[[:blank:]]*(path|branch)[[:blank:]]*=[[:blank:]]*(.+)'
         while IFS=$'\n' read -r line; do
-            if [[ "$line" =~ ^\[submodule[[:space:]] ]]; then
+            if [[ "$line" =~ $re_submodule ]]; then
                 if [ -n "$path" ] && [ "$BASHGIT_SUPER/$path" -ef "$BASHGIT_REPO" ]; then
                     unset path
                     break
                 else
                     unset path branch
                 fi
-            elif [[ "$line" =~ ^[[:space:]]*(path|branch)[[:space:]]*=[[:space:]]*(.+) ]]; then
+            elif [[ "$line" =~ $re_value ]]; then
                 declare "${BASH_REMATCH[1]}=${BASH_REMATCH[2]}"
             fi
-        done < "$BASHGIT_SUPER/.gitmodules"
+        done < "$BASHGIT_SUPER/.gitmodules" || return 1
         if ! [ -n "$path" ] && [ "$BASHGIT_SUPER/$path" -ef "$BASHGIT_REPO" ]; then
             unset branch
         fi
