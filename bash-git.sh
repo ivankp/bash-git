@@ -47,7 +47,16 @@ BASHGIT_UPDATE_PS1() {
             # this is a submodule
             local re_gitdir='^gitdir:[[:blank:]]*((.*)/\.git.*)'
             if [[ "$(< "$BASHGIT_GIT")" =~ $re_gitdir ]]; then
-                BASHGIT_GIT="$BASHGIT_REPO/${BASH_REMATCH[1]}"
+                local BASHGIT_GIT_TMP="$BASHGIT_REPO/${BASH_REMATCH[1]}"
+
+                if [ ! -d "$BASHGIT_GIT_TMP" ]; then # gitdir is not a directory
+                    # printf "\033[31mInvalid $BASHGIT_GIT file\033[0m\n" >&2
+                    # cat "$BASHGIT_GIT" >&2
+                    BASHGIT_REPO=${BASHGIT_REPO%/*} # go one directory level deeper
+                    continue
+                fi
+
+                BASHGIT_GIT="$BASHGIT_GIT_TMP"
                 BASHGIT_SUPER="$BASHGIT_REPO/${BASH_REMATCH[2]}"
             else
                 unset BASHGIT_{REPO,GIT}
@@ -136,6 +145,51 @@ sm() { # navigate git submodules with fzf
     local modules="$repo/.gitmodules"
     [ -f "$modules" ] || return 1
 
+    local update
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -h)
+                echo "\
+-h: help
+-u: update all submodules
+-u [submodule...]: update specified submodules"
+                return
+                ;;
+            -u)
+                shift
+                update=()
+                while [ $# -gt 0 ]; do
+                    case "$1" in
+                        -*) break ;;
+                        *)
+                            update+=("$1")
+                            shift
+                            ;;
+                    esac
+                done
+                [ -v update ] || update+=(--recursive)
+                update=(submodule update --init "${update[@]}")
+                ;;
+            --)
+                shift
+                break
+                ;;
+            -*)
+                echo "Unrecognized option $1" >&2
+                return 1
+                ;;
+        esac
+    done
+
+    if [ -v update ]; then
+        (
+            set -x
+            cd "$repo"
+            "${update[@]}"
+        )
+        return
+    fi
+
     # TODO: go into submodules of submodules
 
     modules="$(awk '
@@ -154,6 +208,26 @@ sm() { # navigate git submodules with fzf
 
     [ -n "$modules" ] && cd "$repo/${modules##* }"
 }
+
+_complete_sm() {
+    if [ "$COMP_CWORD" -gt 0 ]; then
+        local comp=''
+        local arg="${COMP_WORDS[$COMP_CWORD]}"
+        case "${COMP_WORDS[$(($COMP_CWORD - 1))]}" in
+            -u) #TODO
+                ;;
+            *)
+                case "$arg" in
+                    -*)
+                        comp='-h -u'
+                        ;;
+                esac
+                ;;
+        esac
+        COMPREPLY=($(compgen -W "$comp" -- "$arg"))
+    fi
+}
+complete -F _complete_sm sm
 
 topic() {
     [ $# -gt 1 ] || [ -z "$BASHGIT_REPO" ] && return 1
