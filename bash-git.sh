@@ -146,6 +146,7 @@ sm() { # navigate git submodules with fzf
     [ -f "$modules" ] || return 1
 
     local update
+    local args=()
     while [ $# -gt 0 ]; do
         case "$1" in
             -h)
@@ -178,6 +179,10 @@ sm() { # navigate git submodules with fzf
                 echo "Unrecognized option $1" >&2
                 return 1
                 ;;
+            *)
+                args+=("$1")
+                shift
+                ;;
         esac
     done
 
@@ -204,7 +209,7 @@ sm() { # navigate git submodules with fzf
         }
         END {
             printf "\n"
-        }' "$modules" | sort | fzf -i -q "$1")"
+        }' "$modules" | sort | fzf -i -q "${args[*]}")"
 
     [ -n "$modules" ] && cd "$repo/${modules##* }"
 }
