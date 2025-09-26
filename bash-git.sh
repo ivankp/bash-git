@@ -36,6 +36,9 @@ BASHGIT_UPDATE_PS1() {
     # number of background processes
     PS1+='${_BASHGIT_NJOBS\j-\[\033[33m\][\j]\[\033[0m\] }'
 
+    # python virtual environment
+    [ -n "$VIRTUAL_ENV" ] && PS1+="🐍 "
+
     # git
     unset BASHGIT_{GIT,SUPER,HASH,BRANCH,ORIGIN,ORIGIN_SHORT}
     BASHGIT_REPO="$PWD"
