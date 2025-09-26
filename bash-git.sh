@@ -118,7 +118,7 @@ BASHGIT_UPDATE_PS1() {
 
     # current directory
     local cwd="$PWD"
-    [[ "$cwd" =~ ^"$HOME"(/|$) ]] && cwd="~${cwd#$HOME}"
+    [[ "$cwd" =~ ^"$HOME"/? ]] && cwd="~${cwd#$HOME}"
     # grey slashes
     PS1+="${cwd//\//$COLOR_GREY/$COLOR_0}"
 
@@ -169,7 +169,7 @@ sm() { # navigate git submodules with fzf
                     esac
                 done
                 [ -v update ] || update+=(--recursive)
-                update=(submodule update --init "${update[@]}")
+                update=(git submodule update --init "${update[@]}")
                 ;;
             --)
                 shift
@@ -217,8 +217,8 @@ sm() { # navigate git submodules with fzf
 _complete_sm() {
     if [ "$COMP_CWORD" -gt 0 ]; then
         local comp=''
-        local arg="${COMP_WORDS[$COMP_CWORD]}"
-        case "${COMP_WORDS[$(($COMP_CWORD - 1))]}" in
+        local arg="${COMP_WORDS[COMP_CWORD]}"
+        case "${COMP_WORDS[COMP_CWORD-1]}" in
             -u) #TODO
                 ;;
             *)
