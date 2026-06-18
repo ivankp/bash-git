@@ -1,6 +1,4 @@
-#!/usr/bin/bash
-
-# PS1 \ variables documentation:
+# PS1 and \ variables documentation:
 # https://man7.org/linux/man-pages/man1/bash.1.html#PROMPTING
 
 # Shell Parameter Expansion documentation:
@@ -23,14 +21,24 @@ PS0="$COLOR_GREY└ \D{%I:%M:%S %P}$COLOR_0\n"
 _BASHGIT_NJOBS0=''
 
 BASHGIT_UPDATE_PS1() {
-    local prev_duration=$(($SECONDS - $_PREV_SECONDS))
+    local prev_duration=$(( $SECONDS - $_PREV_SECONDS ))
     unset _PREV_SECONDS
 
     PS1="$COLOR_GREY┌$COLOR_0 "
 
     # previous command duration
     if (( prev_duration > 1 )); then
-        PS1="\n$COLOR_GREY$prev_duration s$COLOR_0\n$PS1"
+        # seconds
+        local t=$(( prev_duration % 60 ))
+        local d="$t s"
+        # minutes
+        t=$(( (prev_duration % 3600) / 60 ))
+        (( t > 0 )) && d="$t m $d"
+        # hours
+        t=$(( prev_duration / 3600 ))
+        (( t > 0 )) && d="$t h $d"
+
+        PS1="\n$COLOR_GREY$d$COLOR_0\n$PS1"
     fi
 
     # number of background processes
@@ -141,6 +149,26 @@ BASHGIT_UPDATE_PS1() {
 
 PROMPT_COMMAND=BASHGIT_UPDATE_PS1
 
+BASHGIT_SM_RE_PATH='^[[:space:]]*(path)[[:space:]]*=[[:space:]]*(.+)'
+BASHGIT_SM_R() {
+    pushd "$1" > /dev/null || exit 1
+
+    echo "$PWD"
+    [ $# -gt 1 ] && "${@:2}"
+
+    # check if .gitmodules file exists
+    if [ -f ".gitmodules" ]; then
+        # read .gitmodules
+        while IFS=$'\r\n' read -r line; do
+            if [[ "$line" =~ $BASHGIT_SM_RE_PATH ]]; then
+                BASHGIT_SM_R "${BASH_REMATCH[2]}" "${@:2}"
+            fi
+        done < ".gitmodules"
+    fi
+
+    popd > /dev/null
+}
+
 sm() { # navigate git submodules with fzf
     [ -z "$BASHGIT_REPO" ] && return 1
 
@@ -156,7 +184,9 @@ sm() { # navigate git submodules with fzf
                 echo "\
 -h: help
 -u: update all submodules
--u [submodule...]: update specified submodules"
+-u [submodule...]: update specified submodules
+-r: run command for every submodule recursively searching for submodules
+-x: start at current submodule rather than the super repo"
                 return
                 ;;
             -u)
@@ -173,6 +203,26 @@ sm() { # navigate git submodules with fzf
                 done
                 [ -v update ] || update+=(--recursive)
                 update=(git submodule update --init "${update[@]}")
+                ;;
+            -r)
+                shift
+                # find parent directory containing .git directory
+                # local super="$PWD"
+                # while [ -n "$super" ]; do # look for .git
+                #     if [ -d "$super/.git" ]; then # .git is a directory
+                #         BASHGIT_SM_R "$super" "$@"
+                #         return $?
+                #     fi
+                #     super=${super%/*} # go one directory level deeper
+                # done
+                # return 1
+
+                BASHGIT_SM_R "${opt_x:-$repo}" "$@"
+                return
+                ;;
+            -x)
+                shift
+                local opt_x="$BASHGIT_REPO"
                 ;;
             --)
                 shift
@@ -199,6 +249,7 @@ sm() { # navigate git submodules with fzf
     fi
 
     # TODO: go into submodules of submodules
+    # modules="$(BASHGIT_SM_R "$BASHGIT_SUPER" | sort | fzf -i -q "${args[*]}")"
 
     modules="$(awk '
         match($0, /^\[submodule[[:blank:]]+"([^"]+)"\]/, m) {
