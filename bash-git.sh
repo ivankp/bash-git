@@ -135,12 +135,16 @@ BASHGIT_UPDATE_PS1() {
 
     # prompt
     # count how many child processes we are from the original bash process
-    local pid=$$
     local prompt_symbol='├'
-    while [ "$pid" != '1' ]; do
+    if [ "$MSYSTEM" == "MINGW64" ]; then
+        local pid=$$
+        while [ "$pid" != '1' ]; do
+            prompt_symbol+='\$'
+            pid="$(< "/proc/$pid/ppid")"
+        done
+    else
         prompt_symbol+='\$'
-        pid="$(< "/proc/$pid/ppid")"
-    done
+    fi
     PS1+="\n$COLOR_GREY$prompt_symbol$COLOR_0 "
 
     # set terminal window title
