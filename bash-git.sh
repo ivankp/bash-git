@@ -134,21 +134,17 @@ BASHGIT_UPDATE_PS1() {
     PS1+="${cwd//\//$COLOR_GREY/$COLOR_0}"
 
     # prompt
-    # count how many child processes we are from the original bash process
+    # add $ for each shell level
     local prompt_symbol='├'
-    if [ "$MSYSTEM" == "MINGW64" ]; then
-        local pid=$$
-        while [ "$pid" != '1' ]; do
-            prompt_symbol+='\$'
-            pid="$(< "/proc/$pid/ppid")"
-        done
-    else
+    local l
+    for ((l=0; l<SHLVL; l++)); do
         prompt_symbol+='\$'
-    fi
+    done
+    (( l == 0 )) && prompt_symbol+='\$'
     PS1+="\n$COLOR_GREY$prompt_symbol$COLOR_0 "
 
     # set terminal window title
-    PS1="\[\033]0;${BASHGIT_ORIGIN_SHORT:-Git Bash}\007\]$PS1"
+    PS1="\[\033]0;${BASHGIT_ORIGIN_SHORT:-Bash}\007\]$PS1"
 }
 
 PROMPT_COMMAND=BASHGIT_UPDATE_PS1
