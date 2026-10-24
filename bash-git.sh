@@ -328,3 +328,54 @@ topic() {
         echo "git switch -c topic/$branch/"
     fi
 }
+
+br_list_heads() {
+    local f
+    for f in "$1"/*; do
+        if [ -d "$f" ]; then
+            br_list_heads "$f"
+        else
+            f="${f#"$heads/"}"
+            full+=("$f $path")
+            names["${f##*/}"]=1
+        fi
+    done
+}
+
+br() { # work with submodule branches
+    [ -z "$BASHGIT_REPO" ] && return 1
+
+    local repo="${BASHGIT_SUPER:-$BASHGIT_REPO}"
+    local modules="$repo/.gitmodules"
+    [ -f "$modules" ] || return 1
+
+    local nullglob_orig="$(shopt -p nullglob)"
+    shopt -s nullglob
+
+    local line path heads
+    local -a full
+    local -A names
+    local re_path='^[[:blank:]]*path[[:blank:]]*=[[:blank:]]*(.*[^[:blank:]])'
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        if [[ "$line" =~ $re_path ]]; then
+            path="${BASH_REMATCH[1]}"
+            heads="${repo}/.git/modules/${path}/refs/heads"
+            br_list_heads "$heads"
+        fi
+    done < "$modules"
+
+    $nullglob_orig
+
+    if [ $# -eq 0 ]; then
+        for x in "${!names[@]}"; do
+            echo "$x"
+        done
+    elif [ $# -eq 1 ]; then
+        local re_branch="^([^[:blank:]]*/)?$1 (.*)"
+        for x in "${full[@]}"; do
+            if [[ "$x" =~ $re_branch ]]; then
+                echo "$x"
+            fi
+        done
+    fi
+}
