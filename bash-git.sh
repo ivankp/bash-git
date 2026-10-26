@@ -20,38 +20,51 @@ PS0="$COLOR_GREY└ \D{%I:%M:%S %P}$COLOR_0\n"
 # using bash parameter substitution
 _BASHGIT_NJOBS0=''
 
-BASHGIT_FIND_PATHS() {
-    unset BASHGIT_{GIT,SUPER,HASH,BRANCH,ORIGIN,ORIGIN_SHORT}
+_PATH_REMOVE_DOTS() {
+    local -n ref="$1"
+    local right left
+    while true; do
+        right="${ref#*/../}"
+        [ "$right" == "$ref" ] && break
+        # left="${ref:0:$(( ${#ref} - ${#right} - 4 ))}"
+        left="${ref%%/../*}"
+        left="${left%/*}"
+        ref="$left/$right"
+    done
+    left="${ref%/..}"
+    [ "$left" != "$ref" ] && ref="${left%/*}"
+}
 
+BASHGIT_CHECK_REPO() {
     # Inspect current path
     local re='^(.+)/.git(/.*)?$'
     if [[ "$PWD" =~ $re ]]; then
         BASHGIT_REPO="${BASH_REMATCH[1]}"
         BASHGIT_SUPER="$BASHGIT_REPO"
         BASHGIT_GIT="$BASHGIT_REPO/.git"
-        local TAIL="${BASH_REMATCH[2]}"
-        if [[ "$TAIL" == /modules* ]]; then # inside .git/modules
-            while [ -n "$TAIL" ]; do # look for HEAD
-                [ $# -gt 0 ] && echo "$BASHGIT_GIT$TAIL/HEAD"
-                if [ -f "$BASHGIT_GIT$TAIL/config" ]; then
+        local right="${BASH_REMATCH[2]}"
+        if [[ "$right" == /modules* ]]; then # inside .git/modules
+            while [ -n "$right" ]; do # look for HEAD
+                local config="$BASHGIT_GIT$right/config"
+                if [ -f "$config" ]; then
                     # Read repo directory from config file
                     re='^[[:blank:]]*worktree[[:blank:]]*=[[:blank:]]*(.*[^[:blank:]])'
                     local line
-                    while IFS= read -r line || [[ -n "$line" ]]; do
+                    while IFS=$'\n' read -r line || [[ -n "$line" ]]; do
                         if [[ "$line" =~ $re ]]; then
-                            # TODO: check if worktree path is absolute
-                            local path="$BASHGIT_GIT$TAIL/${BASH_REMATCH[1]}"
+                            local path="${BASH_REMATCH[1]}"
+                            [[ "$path" != /* ]] && path="$BASHGIT_GIT$right/$path"
                             if [ -d "$path" ]; then
-                                # TODO: remove ..
+                                _PATH_REMOVE_DOTS path
                                 BASHGIT_REPO="$path"
-                                BASHGIT_GIT="$BASHGIT_GIT$TAIL"
+                                BASHGIT_GIT="$BASHGIT_GIT$right"
                                 return
                             fi
                             break
                         fi
-                    done < "$BASHGIT_GIT$TAIL/config"
+                    done < "$config"
                 fi
-                TAIL=${TAIL%/*} # go one directory level deeper
+                right=${right%/*} # go one directory level deeper
             done
         fi
         return
@@ -68,7 +81,8 @@ BASHGIT_FIND_PATHS() {
             # this is a submodule
             re='^gitdir:[[:blank:]]*((.*)/\.git.*)'
             if [[ "$(< "$BASHGIT_GIT")" =~ $re ]]; then
-                BASHGIT_GIT="$BASHGIT_REPO/${BASH_REMATCH[1]}"
+                BASHGIT_GIT="${BASH_REMATCH[1]}"
+                [[ "$BASHGIT_GIT" != /* ]] && BASHGIT_GIT="$BASHGIT_REPO/$BASHGIT_GIT"
                 if [ -d "$BASHGIT_GIT" ]; then
                     # .git file points to a valid directory
                     BASHGIT_SUPER="$BASHGIT_REPO/${BASH_REMATCH[2]}"
@@ -79,7 +93,17 @@ BASHGIT_FIND_PATHS() {
         BASHGIT_REPO=${BASHGIT_REPO%/*} # go one directory level deeper
     done
 
-    unset BASHGIT_{REPO,GIT}
+    unset BASHGIT_{REPO,SUPER,GIT}
+}
+
+repo() {
+    BASHGIT_CHECK_REPO
+    [ -v BASHGIT_REPO ] && cd "$BASHGIT_REPO"
+}
+
+super() {
+    BASHGIT_CHECK_REPO
+    [ -v BASHGIT_SUPER ] && cd "$BASHGIT_SUPER"
 }
 
 BASHGIT_UPDATE_PS1() {
@@ -110,7 +134,7 @@ BASHGIT_UPDATE_PS1() {
     [ -n "$VIRTUAL_ENV" ] && PS1+="🐍 "
 
     # git
-    BASHGIT_FIND_PATHS
+    BASHGIT_CHECK_REPO
 
     if [ -v BASHGIT_REPO ]; then # this is a git repo
         # head hash and branch
@@ -124,21 +148,20 @@ BASHGIT_UPDATE_PS1() {
             else
                 BASHGIT_HASH=''
             fi
+        else
+            unset BASHGIT_BRANCH
         fi
 
-        # add short hash to PS1
+        # add short hash and branch name to PS1
         if [ -n "$BASHGIT_HASH" ]; then
             local color='31'
             local commit="${BASHGIT_HASH:0:7}"
-            if [ -n "$BASHGIT_BRANCH" ]; then
+            if [ -v BASHGIT_BRANCH ]; then
                 color='32'
                 commit+=" $BASHGIT_BRANCH"
             fi
             PS1+="\[\033[${color}m\]$commit$COLOR_0 "
         fi
-
-        # indicate if currently in a submodule
-        # [ -v BASHGIT_SUPER ] && PS1+="\[\033[33m\]sub$COLOR_0 "
 
         # get git origin remote name
         # git config --get remote.origin.url
@@ -146,7 +169,7 @@ BASHGIT_UPDATE_PS1() {
         local re_url='^[[:blank:]]*url[[:blank:]]*=[[:blank:]]*(.+)'
         local re_url2='(.*:([0-9]*/)?)?(([^/]+/)?[^/]+)\.git$'
         local line
-        while IFS=$'\n' read -r line; do
+        while IFS=$'\n' read -r line || [[ -n "$line" ]]; do
             if [ -v re_origin ]; then
                 [[ "$line" =~ $re_origin ]] && unset re_origin
             elif [[ "$line" =~ $re_url ]]; then
