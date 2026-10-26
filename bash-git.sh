@@ -20,6 +20,68 @@ PS0="$COLOR_GREY└ \D{%I:%M:%S %P}$COLOR_0\n"
 # using bash parameter substitution
 _BASHGIT_NJOBS0=''
 
+BASHGIT_FIND_PATHS() {
+    unset BASHGIT_{GIT,SUPER,HASH,BRANCH,ORIGIN,ORIGIN_SHORT}
+
+    # Inspect current path
+    local re='^(.+)/.git(/.*)?$'
+    if [[ "$PWD" =~ $re ]]; then
+        BASHGIT_REPO="${BASH_REMATCH[1]}"
+        BASHGIT_SUPER="$BASHGIT_REPO"
+        BASHGIT_GIT="$BASHGIT_REPO/.git"
+        local TAIL="${BASH_REMATCH[2]}"
+        if [[ "$TAIL" == /modules* ]]; then # inside .git/modules
+            while [ -n "$TAIL" ]; do # look for HEAD
+                [ $# -gt 0 ] && echo "$BASHGIT_GIT$TAIL/HEAD"
+                if [ -f "$BASHGIT_GIT$TAIL/config" ]; then
+                    # Read repo directory from config file
+                    re='^[[:blank:]]*worktree[[:blank:]]*=[[:blank:]]*(.*[^[:blank:]])'
+                    local line
+                    while IFS= read -r line || [[ -n "$line" ]]; do
+                        if [[ "$line" =~ $re ]]; then
+                            # TODO: check if worktree path is absolute
+                            local path="$BASHGIT_GIT$TAIL/${BASH_REMATCH[1]}"
+                            if [ -d "$path" ]; then
+                                # TODO: remove ..
+                                BASHGIT_REPO="$path"
+                                BASHGIT_GIT="$BASHGIT_GIT$TAIL"
+                                return
+                            fi
+                            break
+                        fi
+                    done < "$BASHGIT_GIT$TAIL/config"
+                fi
+                TAIL=${TAIL%/*} # go one directory level deeper
+            done
+        fi
+        return
+    fi
+
+    # Descend into parent directories one by one
+    BASHGIT_REPO="$PWD"
+    while [ -n "$BASHGIT_REPO" ]; do # look for .git
+        BASHGIT_GIT="$BASHGIT_REPO/.git"
+        if [ -d "$BASHGIT_GIT" ]; then # if .git is a directory
+            BASHGIT_SUPER="$BASHGIT_REPO"
+            return
+        elif [ -f "$BASHGIT_GIT" ]; then # if .git is a file
+            # this is a submodule
+            re='^gitdir:[[:blank:]]*((.*)/\.git.*)'
+            if [[ "$(< "$BASHGIT_GIT")" =~ $re ]]; then
+                BASHGIT_GIT="$BASHGIT_REPO/${BASH_REMATCH[1]}"
+                if [ -d "$BASHGIT_GIT" ]; then
+                    # .git file points to a valid directory
+                    BASHGIT_SUPER="$BASHGIT_REPO/${BASH_REMATCH[2]}"
+                    return
+                fi
+            fi
+        fi
+        BASHGIT_REPO=${BASHGIT_REPO%/*} # go one directory level deeper
+    done
+
+    unset BASHGIT_{REPO,GIT}
+}
+
 BASHGIT_UPDATE_PS1() {
     local prev_duration=$(( $SECONDS - $_PREV_SECONDS ))
     unset _PREV_SECONDS
@@ -48,38 +110,9 @@ BASHGIT_UPDATE_PS1() {
     [ -n "$VIRTUAL_ENV" ] && PS1+="🐍 "
 
     # git
-    unset BASHGIT_{GIT,SUPER,HASH,BRANCH,ORIGIN,ORIGIN_SHORT}
-    BASHGIT_REPO="$PWD"
-    while [ -n "$BASHGIT_REPO" ]; do # look for .git
-        BASHGIT_GIT="$BASHGIT_REPO/.git"
-        if [ -d "$BASHGIT_GIT" ]; then # if .git is a directory
-            break
-        elif [ -f "$BASHGIT_GIT" ]; then # if .git is a file
-            # this is a submodule
-            local re_gitdir='^gitdir:[[:blank:]]*((.*)/\.git.*)'
-            if [[ "$(< "$BASHGIT_GIT")" =~ $re_gitdir ]]; then
-                local BASHGIT_GIT_TMP="$BASHGIT_REPO/${BASH_REMATCH[1]}"
+    BASHGIT_FIND_PATHS
 
-                if [ ! -d "$BASHGIT_GIT_TMP" ]; then # gitdir is not a directory
-                    # printf "\033[31mInvalid $BASHGIT_GIT file\033[0m\n" >&2
-                    # cat "$BASHGIT_GIT" >&2
-                    BASHGIT_REPO=${BASHGIT_REPO%/*} # go one directory level deeper
-                    continue
-                fi
-
-                BASHGIT_GIT="$BASHGIT_GIT_TMP"
-                BASHGIT_SUPER="$BASHGIT_REPO/${BASH_REMATCH[2]}"
-            else
-                unset BASHGIT_{REPO,GIT}
-            fi
-            break
-        fi
-        BASHGIT_REPO=${BASHGIT_REPO%/*} # go one directory level deeper
-    done
-
-    if [ -z "$BASHGIT_REPO" ]; then
-        unset BASHGIT_{REPO,GIT}
-    else # this is a git repo
+    if [ -v BASHGIT_REPO ]; then # this is a git repo
         # head hash and branch
         BASHGIT_HASH="$(< "$BASHGIT_GIT/HEAD")"
         local re_ref='^ref:[[:blank:]]*(refs/heads/(.+))'
@@ -137,7 +170,7 @@ BASHGIT_UPDATE_PS1() {
     # add $ for each shell level
     local prompt_symbol='├'
     local l
-    for ((l=0; l<SHLVL; l++)); do
+    for ((l=0; l<SHLVL; ++l)); do
         prompt_symbol+='\$'
     done
     (( l == 0 )) && prompt_symbol+='\$'
