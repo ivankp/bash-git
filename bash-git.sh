@@ -23,18 +23,20 @@ _BASHGIT_NJOBS0=''
 _PATH_REMOVE_DOTS() {
     local -n ref="$1"
     local right left
+    # /a/b/../c -> /a/c
     while true; do
         right="${ref#*/../}"
         [ "$right" == "$ref" ] && break
-        # left="${ref:0:$(( ${#ref} - ${#right} - 4 ))}"
         left="${ref%%/../*}"
         left="${left%/*}"
         ref="$left/$right"
     done
+    # /a/b/c/.. -> /a/b
     left="${ref%/..}"
     [ "$left" != "$ref" ] && ref="${left%/*}"
 }
 
+# Set REPO, SUPER, and GIT paths if we are in a git repo
 BASHGIT_CHECK_REPO() {
     # Inspect current path
     local re='^(.+)/.git(/.*)?$'
@@ -44,7 +46,7 @@ BASHGIT_CHECK_REPO() {
         BASHGIT_GIT="$BASHGIT_REPO/.git"
         local right="${BASH_REMATCH[2]}"
         if [[ "$right" == /modules* ]]; then # inside .git/modules
-            while [ -n "$right" ]; do # look for HEAD
+            while [ -n "$right" ]; do # look for config file
                 local config="$BASHGIT_GIT$right/config"
                 if [ -f "$config" ]; then
                     # Read repo directory from config file
@@ -64,7 +66,7 @@ BASHGIT_CHECK_REPO() {
                         fi
                     done < "$config"
                 fi
-                right=${right%/*} # go one directory level deeper
+                right=${right%/*} # go one directory level up
             done
         fi
         return
@@ -90,10 +92,10 @@ BASHGIT_CHECK_REPO() {
                 fi
             fi
         fi
-        BASHGIT_REPO=${BASHGIT_REPO%/*} # go one directory level deeper
+        BASHGIT_REPO=${BASHGIT_REPO%/*} # go one directory level up
     done
 
-    unset BASHGIT_{REPO,SUPER,GIT}
+    unset BASHGIT_{REPO,SUPER,GIT,HASH,BRANCH,ORIGIN,ORIGIN_SHORT}
 }
 
 repo() {
@@ -148,8 +150,6 @@ BASHGIT_UPDATE_PS1() {
             else
                 BASHGIT_HASH=''
             fi
-        else
-            unset BASHGIT_BRANCH
         fi
 
         # add short hash and branch name to PS1
@@ -191,16 +191,15 @@ BASHGIT_UPDATE_PS1() {
 
     # prompt
     # add $ for each shell level
-    local prompt_symbol='├'
+    local prompt_symbol='├\$'
     local l
-    for ((l=0; l<SHLVL; ++l)); do
+    for ((l=1; l<SHLVL; ++l)); do
         prompt_symbol+='\$'
     done
-    (( l == 0 )) && prompt_symbol+='\$'
     PS1+="\n$COLOR_GREY$prompt_symbol$COLOR_0 "
 
     # set terminal window title
-    PS1="\[\033]0;${BASHGIT_ORIGIN_SHORT:-Bash}\007\]$PS1"
+    PS1="\[\033]0;${BASHGIT_ORIGIN_SHORT:-bash}\007\]$PS1"
 }
 
 PROMPT_COMMAND=BASHGIT_UPDATE_PS1
