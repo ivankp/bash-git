@@ -14,7 +14,7 @@ _trap_DEBUG() {
 trap _trap_DEBUG DEBUG # execute before every command
 
 # PS0: expanded and displayed after reading a command but before the command is executed
-PS0="$COLOR_GREY└ \D{%I:%M:%S %P}$COLOR_0\n"
+[ -v BASHGIT_SET_PS0 ] && PS0="$COLOR_GREY└ \D{%I:%M:%S %P}$COLOR_0\n"
 
 # trick to not print anything if \j resolves to 0 in PS1
 # using bash parameter substitution
@@ -98,17 +98,7 @@ BASHGIT_CHECK_REPO() {
     unset BASHGIT_{REPO,SUPER,GIT,HASH,BRANCH,ORIGIN,ORIGIN_SHORT}
 }
 
-repo() {
-    BASHGIT_CHECK_REPO
-    [ -v BASHGIT_REPO ] && cd "$BASHGIT_REPO"
-}
-
-super() {
-    BASHGIT_CHECK_REPO
-    [ -v BASHGIT_SUPER ] && cd "$BASHGIT_SUPER"
-}
-
-BASHGIT_UPDATE_PS1() {
+BASHGIT_PROMPT_COMMAND() {
     local prev_duration=$(( $SECONDS - $_PREV_SECONDS ))
     unset _PREV_SECONDS
 
@@ -202,7 +192,17 @@ BASHGIT_UPDATE_PS1() {
     PS1="\[\033]0;${BASHGIT_ORIGIN_SHORT:-bash}\007\]$PS1"
 }
 
-PROMPT_COMMAND=BASHGIT_UPDATE_PS1
+[ -v BASHGIT_SET_PS1 ] && PROMPT_COMMAND=BASHGIT_PROMPT_COMMAND
+
+repo() {
+    BASHGIT_CHECK_REPO
+    [ -v BASHGIT_REPO ] && cd "$BASHGIT_REPO"
+}
+
+super() {
+    BASHGIT_CHECK_REPO
+    [ -v BASHGIT_SUPER ] && cd "$BASHGIT_SUPER"
+}
 
 BASHGIT_SM_RE_PATH='^[[:space:]]*(path)[[:space:]]*=[[:space:]]*(.+)'
 BASHGIT_SM_R() {
