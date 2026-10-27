@@ -192,8 +192,8 @@ BASHGIT_UPDATE_PS1() {
     # prompt
     # add $ for each shell level
     local prompt_symbol='├\$'
-    local l
-    for ((l=1; l<SHLVL; ++l)); do
+    local l="${SHLVL:-1}"
+    for ((; l > 1; --l)); do
         prompt_symbol+='\$'
     done
     PS1+="\n$COLOR_GREY$prompt_symbol$COLOR_0 "
