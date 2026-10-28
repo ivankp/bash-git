@@ -5,7 +5,7 @@
 # https://www.gnu.org/software/bash/manual/html_node/Shell-Parameter-Expansion.html
 
 COLOR_0='\[\033[0m\]'
-COLOR_GREY='\[\033[1;90m\]'
+COLOR_GREY='\[\033[90m\]'
 
 _trap_DEBUG() {
     # save current $SECONDS value
@@ -14,7 +14,7 @@ _trap_DEBUG() {
 trap _trap_DEBUG DEBUG # execute before every command
 
 # PS0: expanded and displayed after reading a command but before the command is executed
-[ -v BASHGIT_SET_PS0 ] && PS0="$COLOR_GREY└ \D{%I:%M:%S %P}$COLOR_0\n"
+[ -v BASHGIT_PROMPT ] && PS0="$COLOR_GREY└ \D{%I:%M:%S %P}$COLOR_0\n"
 
 # trick to not print anything if \j resolves to 0 in PS1
 # using bash parameter substitution
@@ -95,11 +95,11 @@ BASHGIT_CHECK_REPO() {
         BASHGIT_REPO=${BASHGIT_REPO%/*} # go one directory level up
     done
 
-    unset BASHGIT_{REPO,SUPER,GIT,HASH,BRANCH,ORIGIN,ORIGIN_SHORT}
+    unset BASHGIT_{REPO,SUPER,GIT}
 }
 
 BASHGIT_PROMPT_COMMAND() {
-    local prev_duration=$(( $SECONDS - $_PREV_SECONDS ))
+    local prev_duration=$(( SECONDS - _PREV_SECONDS ))
     unset _PREV_SECONDS
 
     PS1="$COLOR_GREY┌$COLOR_0 "
@@ -128,6 +128,7 @@ BASHGIT_PROMPT_COMMAND() {
     # git
     BASHGIT_CHECK_REPO
 
+    unset BASHGIT_{HASH,BRANCH,ORIGIN,ORIGIN_SHORT}
     if [ -v BASHGIT_REPO ]; then # this is a git repo
         # head hash and branch
         BASHGIT_HASH="$(< "$BASHGIT_GIT/HEAD")"
@@ -192,7 +193,7 @@ BASHGIT_PROMPT_COMMAND() {
     PS1="\[\033]0;${BASHGIT_ORIGIN_SHORT:-bash}\007\]$PS1"
 }
 
-[ -v BASHGIT_SET_PS1 ] && PROMPT_COMMAND=BASHGIT_PROMPT_COMMAND
+[ -v BASHGIT_PROMPT ] && PROMPT_COMMAND=BASHGIT_PROMPT_COMMAND
 
 repo() {
     BASHGIT_CHECK_REPO
