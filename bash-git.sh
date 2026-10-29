@@ -11,6 +11,8 @@ BASHGIT_COLOR_NOBRANCH='\[\033[31m\]'
 BASHGIT_COLOR_ORIGIN='\[\033[35m\]'
 BASHGIT_HASH_LENGTH=7
 
+BASHGIT_GL_FORMAT='%C(auto)%h%Creset %s %Cblue(%an, %cd)%Creset%Cgreen%d%Creset'
+
 _trap_DEBUG() {
     # save current $SECONDS value
     _PREV_SECONDS=${_PREV_SECONDS:-$SECONDS}
@@ -217,6 +219,21 @@ repo() {
 
 super() {
     BASHGIT_CHECK_REPO && cd "$BASHGIT_SUPER"
+}
+
+gl() {
+    local OPTIND opt n=8 fmt= date=
+    while getopts ':cd:f:n:' opt; do
+        case "$opt" in
+            c) echo "$(git rev-list --count HEAD) commits" ;;
+            n) n="${OPTARG}" ;;
+            d) date="${OPTARG}" ;;
+            f) fmt="${OPTARG}" ;;
+        esac
+    done
+    shift "$(($OPTIND -1))"
+
+    git log --date="${date:-relative}" --format="${fmt:-"$BASHGIT_GL_FORMAT"}" -n"$n" "$@"
 }
 
 BASHGIT_SM_RE_PATH='^[[:space:]]*(path)[[:space:]]*=[[:space:]]*(.+)'
