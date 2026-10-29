@@ -106,6 +106,7 @@ BASHGIT_CHECK_REPO() {
 # get git origin remote name
 # git config --get remote.origin.url
 BASHGIT_CHECK_ORIGIN() {
+    unset BASHGIT_ORIGIN
     [ -v BASHGIT_GIT ] || return 1
 
     local re_origin='^\[remote[[:blank:]]+"origin"\]'
@@ -120,8 +121,25 @@ BASHGIT_CHECK_ORIGIN() {
         fi
     done < "$BASHGIT_GIT/config"
 
-    unset BASHGIT_ORIGIN
     return 1
+}
+
+BASHGIT_CHECK_COMMIT() {
+    unset BASHGIT_{HASH,BRANCH}
+    [ -v BASHGIT_GIT ] || return 1
+
+    BASHGIT_HASH="$(< "$BASHGIT_GIT/HEAD")"
+    local re_ref='^ref:[[:blank:]]*(refs/heads/(.+))'
+    if [[ "$BASHGIT_HASH" =~ $re_ref ]]; then
+        BASHGIT_BRANCH="${BASH_REMATCH[2]}"
+        local ref="$BASHGIT_GIT/${BASH_REMATCH[1]}"
+        if [ -f "$ref" ]; then
+            BASHGIT_HASH="$(< "$ref")"
+        else
+            unset BASHGIT_{HASH,BRANCH}
+            return 1
+        fi
+    fi
 }
 
 BASHGIT_PROMPT_COMMAND() {
@@ -154,21 +172,8 @@ BASHGIT_PROMPT_COMMAND() {
     # git
     unset BASHGIT_{HASH,BRANCH,ORIGIN,ORIGIN_SHORT}
     if BASHGIT_CHECK_REPO; then # this is a git repo
-        # head hash and branch
-        BASHGIT_HASH="$(< "$BASHGIT_GIT/HEAD")"
-        local re_ref='^ref:[[:blank:]]*(refs/heads/(.+))'
-        if [[ "$BASHGIT_HASH" =~ $re_ref ]]; then
-            BASHGIT_BRANCH="${BASH_REMATCH[2]}"
-            local ref="$BASHGIT_GIT/${BASH_REMATCH[1]}"
-            if [ -f "$ref" ]; then
-                BASHGIT_HASH="$(< "$ref")"
-            else
-                BASHGIT_HASH=''
-            fi
-        fi
-
-        # add short hash and branch name to PS1
-        if [ -n "$BASHGIT_HASH" ]; then
+        if BASHGIT_CHECK_COMMIT; then # get head hash and branch
+            # add short hash and branch name to PS1
             local color="$BASHGIT_COLOR_NOBRANCH"
             local commit="${BASHGIT_HASH:0:$BASHGIT_HASH_LENGTH}"
             if [ -v BASHGIT_BRANCH ]; then
@@ -179,9 +184,9 @@ BASHGIT_PROMPT_COMMAND() {
         fi
 
         if BASHGIT_CHECK_ORIGIN; then
-            local re_url='(.*:([0-9]*/)?)?(([^/]+/)?[^/]+)\.git$'
+            local re_url='(([^/]+/)?[^/]+)\.git$'
             if [[ "$BASHGIT_ORIGIN" =~ $re_url ]]; then
-                BASHGIT_ORIGIN_SHORT="${BASH_REMATCH[3]}"
+                BASHGIT_ORIGIN_SHORT="${BASH_REMATCH[1]}"
                 PS1+="$BASHGIT_COLOR_ORIGIN$BASHGIT_ORIGIN_SHORT$BASHGIT_COLOR_0 "
             fi
         fi
