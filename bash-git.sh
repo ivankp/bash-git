@@ -172,7 +172,8 @@ BASHGIT_PROMPT_COMMAND() {
     [ -n "$VIRTUAL_ENV" ] && PS1+="🐍 "
 
     # git
-    unset BASHGIT_{HASH,BRANCH,ORIGIN,ORIGIN_SHORT}
+    unset BASHGIT_{HASH,BRANCH,ORIGIN}
+    local origin
     if BASHGIT_CHECK_REPO; then # this is a git repo
         if BASHGIT_CHECK_COMMIT; then # get head hash and branch
             # add short hash and branch name to PS1
@@ -188,8 +189,8 @@ BASHGIT_PROMPT_COMMAND() {
         if BASHGIT_CHECK_ORIGIN; then
             local re_url='(([^/]+/)?[^/]+)\.git$'
             if [[ "$BASHGIT_ORIGIN" =~ $re_url ]]; then
-                BASHGIT_ORIGIN_SHORT="${BASH_REMATCH[1]}"
-                PS1+="$BASHGIT_COLOR_ORIGIN$BASHGIT_ORIGIN_SHORT$BASHGIT_COLOR_0 "
+                origin="${BASH_REMATCH[1]}"
+                PS1+="$BASHGIT_COLOR_ORIGIN$origin$BASHGIT_COLOR_0 "
             fi
         fi
     fi
@@ -197,7 +198,7 @@ BASHGIT_PROMPT_COMMAND() {
     # current directory
     local cwd="$PWD"
     [[ "$cwd" =~ ^"$HOME"/? ]] && cwd="~${cwd#$HOME}"
-    # grey slashes
+    # color slashes
     PS1+="${cwd//\//$BASHGIT_COLOR_MISC/$BASHGIT_COLOR_0}"
 
     # prompt
@@ -210,7 +211,7 @@ BASHGIT_PROMPT_COMMAND() {
     PS1+="\n$BASHGIT_COLOR_MISC$prompt_symbol$BASHGIT_COLOR_0 "
 
     # set terminal window title
-    PS1="\[\033]0;${BASHGIT_ORIGIN_SHORT:-bash}\007\]$PS1"
+    PS1="\[\033]0;${origin:-bash}\007\]$PS1"
 }
 
 repo() {
@@ -236,7 +237,6 @@ gl() {
     git log --date="${date:-relative}" --format="${fmt:-"$BASHGIT_GL_FORMAT"}" -n"$n" "$@"
 }
 
-BASHGIT_SM_RE_PATH='^[[:space:]]*(path)[[:space:]]*=[[:space:]]*(.+)'
 BASHGIT_SM_R() {
     pushd "$1" > /dev/null || exit 1
 
@@ -246,8 +246,9 @@ BASHGIT_SM_R() {
     # check if .gitmodules file exists
     if [ -f ".gitmodules" ]; then
         # read .gitmodules
+        local re='^[[:space:]]*(path)[[:space:]]*=[[:space:]]*(.+)'
         while IFS=$'\r\n' read -r line; do
-            if [[ "$line" =~ $BASHGIT_SM_RE_PATH ]]; then
+            if [[ "$line" =~ $re ]]; then
                 BASHGIT_SM_R "${BASH_REMATCH[2]}" "${@:2}"
             fi
         done < ".gitmodules"
