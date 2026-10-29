@@ -18,7 +18,7 @@ _trap_DEBUG() {
 trap _trap_DEBUG DEBUG # execute before every command
 
 # PS0: expanded and displayed after reading a command but before the command is executed
-[ -v BASHGIT_PROMPT ] && PS0="$BASHGIT_COLOR_MISC└ \D{%I:%M:%S %P}$BASHGIT_COLOR_0\n"
+BASHGIT_PS0="$BASHGIT_COLOR_MISC└ \D{%I:%M:%S %P}$BASHGIT_COLOR_0\n"
 
 # trick to not print anything if \j resolves to 0 in PS1
 # using bash parameter substitution
@@ -205,8 +205,6 @@ BASHGIT_PROMPT_COMMAND() {
     # set terminal window title
     PS1="\[\033]0;${BASHGIT_ORIGIN_SHORT:-bash}\007\]$PS1"
 }
-
-[ -v BASHGIT_PROMPT ] && PROMPT_COMMAND=BASHGIT_PROMPT_COMMAND
 
 repo() {
     BASHGIT_CHECK_REPO && cd "$BASHGIT_REPO"
