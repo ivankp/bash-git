@@ -4,8 +4,12 @@
 # Shell Parameter Expansion documentation:
 # https://www.gnu.org/software/bash/manual/html_node/Shell-Parameter-Expansion.html
 
-COLOR_0='\[\033[0m\]'
-COLOR_GREY='\[\033[90m\]'
+BASHGIT_COLOR_0='\[\033[0m\]'
+BASHGIT_COLOR_MISC='\[\033[90m\]'
+BASHGIT_COLOR_BRANCH='\[\033[32m\]'
+BASHGIT_COLOR_NOBRANCH='\[\033[31m\]'
+BASHGIT_COLOR_ORIGIN='\[\033[35m\]'
+BASHGIT_HASH_LENGTH=7
 
 _trap_DEBUG() {
     # save current $SECONDS value
@@ -14,7 +18,7 @@ _trap_DEBUG() {
 trap _trap_DEBUG DEBUG # execute before every command
 
 # PS0: expanded and displayed after reading a command but before the command is executed
-[ -v BASHGIT_PROMPT ] && PS0="$COLOR_GREY└ \D{%I:%M:%S %P}$COLOR_0\n"
+[ -v BASHGIT_PROMPT ] && PS0="$BASHGIT_COLOR_MISC└ \D{%I:%M:%S %P}$BASHGIT_COLOR_0\n"
 
 # trick to not print anything if \j resolves to 0 in PS1
 # using bash parameter substitution
@@ -96,6 +100,7 @@ BASHGIT_CHECK_REPO() {
     done
 
     unset BASHGIT_{REPO,SUPER,GIT}
+    return 1
 }
 
 # get git origin remote name
@@ -123,7 +128,7 @@ BASHGIT_PROMPT_COMMAND() {
     local prev_duration=$(( SECONDS - _PREV_SECONDS ))
     unset _PREV_SECONDS
 
-    PS1="$COLOR_GREY┌$COLOR_0 "
+    PS1="$BASHGIT_COLOR_MISC┌$BASHGIT_COLOR_0 "
 
     # previous command duration
     if (( prev_duration > 1 )); then
@@ -137,7 +142,7 @@ BASHGIT_PROMPT_COMMAND() {
         t=$(( prev_duration / 3600 ))
         (( t > 0 )) && d="$t h $d"
 
-        PS1="\n$COLOR_GREY$d$COLOR_0\n$PS1"
+        PS1="\n$BASHGIT_COLOR_MISC$d$BASHGIT_COLOR_0\n$PS1"
     fi
 
     # number of background processes
@@ -147,10 +152,8 @@ BASHGIT_PROMPT_COMMAND() {
     [ -n "$VIRTUAL_ENV" ] && PS1+="🐍 "
 
     # git
-    BASHGIT_CHECK_REPO
-
     unset BASHGIT_{HASH,BRANCH,ORIGIN,ORIGIN_SHORT}
-    if [ -v BASHGIT_REPO ]; then # this is a git repo
+    if BASHGIT_CHECK_REPO; then # this is a git repo
         # head hash and branch
         BASHGIT_HASH="$(< "$BASHGIT_GIT/HEAD")"
         local re_ref='^ref:[[:blank:]]*(refs/heads/(.+))'
@@ -166,20 +169,20 @@ BASHGIT_PROMPT_COMMAND() {
 
         # add short hash and branch name to PS1
         if [ -n "$BASHGIT_HASH" ]; then
-            local color='31'
-            local commit="${BASHGIT_HASH:0:7}"
+            local color="$BASHGIT_COLOR_NOBRANCH"
+            local commit="${BASHGIT_HASH:0:$BASHGIT_HASH_LENGTH}"
             if [ -v BASHGIT_BRANCH ]; then
-                color='32'
+                color="$BASHGIT_COLOR_BRANCH"
                 commit+=" $BASHGIT_BRANCH"
             fi
-            PS1+="\[\033[${color}m\]$commit$COLOR_0 "
+            PS1+="$color$commit$BASHGIT_COLOR_0 "
         fi
 
         if BASHGIT_CHECK_ORIGIN; then
             local re_url='(.*:([0-9]*/)?)?(([^/]+/)?[^/]+)\.git$'
             if [[ "$BASHGIT_ORIGIN" =~ $re_url ]]; then
                 BASHGIT_ORIGIN_SHORT="${BASH_REMATCH[3]}"
-                PS1+="\[\033[35m\]$BASHGIT_ORIGIN_SHORT$COLOR_0 "
+                PS1+="$BASHGIT_COLOR_ORIGIN$BASHGIT_ORIGIN_SHORT$BASHGIT_COLOR_0 "
             fi
         fi
     fi
@@ -188,7 +191,7 @@ BASHGIT_PROMPT_COMMAND() {
     local cwd="$PWD"
     [[ "$cwd" =~ ^"$HOME"/? ]] && cwd="~${cwd#$HOME}"
     # grey slashes
-    PS1+="${cwd//\//$COLOR_GREY/$COLOR_0}"
+    PS1+="${cwd//\//$BASHGIT_COLOR_MISC/$BASHGIT_COLOR_0}"
 
     # prompt
     # add $ for each shell level
@@ -197,7 +200,7 @@ BASHGIT_PROMPT_COMMAND() {
     for ((; l > 1; --l)); do
         prompt_symbol+='\$'
     done
-    PS1+="\n$COLOR_GREY$prompt_symbol$COLOR_0 "
+    PS1+="\n$BASHGIT_COLOR_MISC$prompt_symbol$BASHGIT_COLOR_0 "
 
     # set terminal window title
     PS1="\[\033]0;${BASHGIT_ORIGIN_SHORT:-bash}\007\]$PS1"
@@ -206,13 +209,11 @@ BASHGIT_PROMPT_COMMAND() {
 [ -v BASHGIT_PROMPT ] && PROMPT_COMMAND=BASHGIT_PROMPT_COMMAND
 
 repo() {
-    BASHGIT_CHECK_REPO
-    [ -v BASHGIT_REPO ] && cd "$BASHGIT_REPO"
+    BASHGIT_CHECK_REPO && cd "$BASHGIT_REPO"
 }
 
 super() {
-    BASHGIT_CHECK_REPO
-    [ -v BASHGIT_SUPER ] && cd "$BASHGIT_SUPER"
+    BASHGIT_CHECK_REPO && cd "$BASHGIT_SUPER"
 }
 
 BASHGIT_SM_RE_PATH='^[[:space:]]*(path)[[:space:]]*=[[:space:]]*(.+)'
