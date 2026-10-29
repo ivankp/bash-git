@@ -98,6 +98,27 @@ BASHGIT_CHECK_REPO() {
     unset BASHGIT_{REPO,SUPER,GIT}
 }
 
+# get git origin remote name
+# git config --get remote.origin.url
+BASHGIT_CHECK_ORIGIN() {
+    [ -v BASHGIT_GIT ] || return 1
+
+    local re_origin='^\[remote[[:blank:]]+"origin"\]'
+    local re_url='^[[:blank:]]*url[[:blank:]]*=[[:blank:]]*(.*[^[:blank:]])'
+    local line
+    while IFS=$'\n' read -r line || [[ -n "$line" ]]; do
+        if [ -v re_origin ]; then
+            [[ "$line" =~ $re_origin ]] && unset re_origin
+        elif [[ "$line" =~ $re_url ]]; then
+            BASHGIT_ORIGIN="${BASH_REMATCH[1]}"
+            return
+        fi
+    done < "$BASHGIT_GIT/config"
+
+    unset BASHGIT_ORIGIN
+    return 1
+}
+
 BASHGIT_PROMPT_COMMAND() {
     local prev_duration=$(( SECONDS - _PREV_SECONDS ))
     unset _PREV_SECONDS
@@ -154,24 +175,13 @@ BASHGIT_PROMPT_COMMAND() {
             PS1+="\[\033[${color}m\]$commit$COLOR_0 "
         fi
 
-        # get git origin remote name
-        # git config --get remote.origin.url
-        local re_origin='^\[remote[[:blank:]]+"origin"\]'
-        local re_url='^[[:blank:]]*url[[:blank:]]*=[[:blank:]]*(.+)'
-        local re_url2='(.*:([0-9]*/)?)?(([^/]+/)?[^/]+)\.git$'
-        local line
-        while IFS=$'\n' read -r line || [[ -n "$line" ]]; do
-            if [ -v re_origin ]; then
-                [[ "$line" =~ $re_origin ]] && unset re_origin
-            elif [[ "$line" =~ $re_url ]]; then
-                BASHGIT_ORIGIN="${BASH_REMATCH[1]}"
-                if [[ "$BASHGIT_ORIGIN" =~ $re_url2 ]]; then
-                    BASHGIT_ORIGIN_SHORT="${BASH_REMATCH[3]}"
-                    PS1+="\[\033[35m\]$BASHGIT_ORIGIN_SHORT$COLOR_0 "
-                fi
-                break
+        if BASHGIT_CHECK_ORIGIN; then
+            local re_url='(.*:([0-9]*/)?)?(([^/]+/)?[^/]+)\.git$'
+            if [[ "$BASHGIT_ORIGIN" =~ $re_url ]]; then
+                BASHGIT_ORIGIN_SHORT="${BASH_REMATCH[3]}"
+                PS1+="\[\033[35m\]$BASHGIT_ORIGIN_SHORT$COLOR_0 "
             fi
-        done < "$BASHGIT_GIT/config"
+        fi
     fi
 
     # current directory
@@ -434,4 +444,11 @@ br() { # work with submodule branches
             fi
         done
     fi
+}
+
+gw() { # Git Web: print link to the online repo
+    BASHGIT_CHECK_REPO
+    BASHGIT_CHECK_ORIGIN || return 1
+
+    echo "$BASHGIT_ORIGIN"
 }
