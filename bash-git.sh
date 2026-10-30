@@ -43,6 +43,22 @@ _PATH_REMOVE_DOTS() {
     [ "$left" != "$ref" ] && ref="${left%/*}"
 }
 
+_FROM_CLIP() {
+    local -n ref="$1"
+    case "$OSTYPE" in
+        msys | cygwin)
+            ref="$(< /dev/clipboard)"
+            if [ "$2" == path ]; then
+                ref="$(cygpath -u "$ref")"
+            fi
+            ;;
+        *)
+            echo 'Not implemented' >&2
+            return 1
+            ;;
+    esac
+}
+
 # Set REPO, SUPER, and GIT paths if we are in a git repo
 BASHGIT_CHECK_REPO() {
     local path="${1:-$PWD}"
@@ -474,6 +490,11 @@ declare -A BASHGIT_REMOTES=(
 
 remote() { # print link to the origin remote's online interface
     local path="$1" ref="$2" dir
+    if [ "$path" == '-' ]; then
+        _FROM_CLIP path path || return 1
+    elif [ "$ref" == '-' ]; then
+        _FROM_CLIP ref path || return 1
+    fi
     if [ -n "$path" ] && [ ! -e "$path" ]; then
         ref="$1"
         path="$2"
