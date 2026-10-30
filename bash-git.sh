@@ -45,11 +45,12 @@ _PATH_REMOVE_DOTS() {
 
 # Set REPO, SUPER, and GIT paths if we are in a git repo
 BASHGIT_CHECK_REPO() {
+    local path="${1:-$PWD}"
     # Inspect current path
     local re='^(.+)/.git(/.*)?$'
-    if [[ "$PWD" =~ $re ]]; then
-        BASHGIT_REPO="${BASH_REMATCH[1]}"
-        BASHGIT_SUPER="$BASHGIT_REPO"
+    if [[ "$path" =~ $re ]]; then
+        BASHGIT_SUPER="${BASH_REMATCH[1]}"
+        BASHGIT_REPO="$BASHGIT_SUPER"
         BASHGIT_GIT="$BASHGIT_REPO/.git"
         local right="${BASH_REMATCH[2]}"
         if [[ "$right" == /modules* ]]; then # inside .git/modules
@@ -59,10 +60,10 @@ BASHGIT_CHECK_REPO() {
                     # Read repo directory from config file
                     re='^[[:blank:]]*worktree[[:blank:]]*=[[:blank:]]*(.*[^[:blank:]])'
                     local line
-                    while IFS=$'\n' read -r line || [[ -n "$line" ]]; do
+                    while IFS=$'\n' read -r line || [ -n "$line" ]; do
                         if [[ "$line" =~ $re ]]; then
-                            local path="${BASH_REMATCH[1]}"
-                            [[ "$path" != /* ]] && path="$BASHGIT_GIT$right/$path"
+                            path="${BASH_REMATCH[1]}"
+                            [ "${path:0:1}" != '/' ] && path="$BASHGIT_GIT$right/$path"
                             if [ -d "$path" ]; then
                                 _PATH_REMOVE_DOTS path
                                 BASHGIT_REPO="$path"
@@ -80,7 +81,7 @@ BASHGIT_CHECK_REPO() {
     fi
 
     # Descend into parent directories one by one
-    BASHGIT_REPO="$PWD"
+    BASHGIT_REPO="$path"
     while [ -n "$BASHGIT_REPO" ]; do # look for .git
         BASHGIT_GIT="$BASHGIT_REPO/.git"
         if [ -d "$BASHGIT_GIT" ]; then # if .git is a directory
@@ -115,7 +116,7 @@ BASHGIT_CHECK_ORIGIN() {
     local re_origin='^\[remote[[:blank:]]+"origin"\]'
     local re_url='^[[:blank:]]*url[[:blank:]]*=[[:blank:]]*(.*[^[:blank:]])'
     local line
-    while IFS=$'\n' read -r line || [[ -n "$line" ]]; do
+    while IFS=$'\n' read -r line || [ -n "$line" ]; do
         if [ -v re_origin ]; then
             [[ "$line" =~ $re_origin ]] && unset re_origin
         elif [[ "$line" =~ $re_url ]]; then
@@ -443,7 +444,7 @@ br() { # work with submodule branches
     local -a full
     local -A names
     local re_path='^[[:blank:]]*path[[:blank:]]*=[[:blank:]]*(.*[^[:blank:]])'
-    while IFS= read -r line || [[ -n "$line" ]]; do
+    while IFS= read -r line || [ -n "$line" ]; do
         if [[ "$line" =~ $re_path ]]; then
             path="${BASH_REMATCH[1]}"
             heads="${repo}/.git/modules/${path}/refs/heads"
@@ -467,13 +468,33 @@ br() { # work with submodule branches
     fi
 }
 
-remote() { # print link to the origin remote's online interface
-    BASHGIT_CHECK_REPO && BASHGIT_CHECK_ORIGIN || return 1
+declare -A BASHGIT_REMOTES=(
+    ['github.com']='github'
+)
 
-    echo "$BASHGIT_ORIGIN"
+remote() { # print link to the origin remote's online interface
+    local path="$1" ref="$2" dir
+    if [ -n "$path" ] && [ ! -e "$path" ]; then
+        ref="$1"
+        path="$2"
+    fi
+    if [ -n "$path" ]; then
+        # conver to absolute path
+        if [ -d "$path" ]; then
+            dir="$path"
+        elif [ -f "$path" ]; then
+            dir="${path%/*}"
+        else
+            echo 'usage: remote [path] [git_ref]' >&2
+            return 1
+        fi
+        [ "${dir:0:1}" != '/' ] && dir="$PWD/$path"
+    fi
+
+    BASHGIT_CHECK_REPO "$dir" && BASHGIT_CHECK_ORIGIN || return 1
 
     local re_http='^https?://([^/]+)/(.*/)?([^/]+)/([^/]+)\.git'
-    local re_ssh='^ssh://([^@/:]+@)?([^/:]+)(:|(:[0-9]+)?/)(.*/)?([^/]+)/([^/]+)\.git'
+    local re_ssh='^(ssh://)?([^@/:]+@)?([^/:]+)(:|(:[0-9]+)?/)(.*/)?([^/]+)/([^/]+)\.git'
 
     local -a m
     local i
@@ -482,22 +503,58 @@ remote() { # print link to the origin remote's online interface
             m+=("${BASH_REMATCH[$i]}")
         done
     elif [[ "$BASHGIT_ORIGIN" =~ $re_ssh ]]; then
-        for i in 2 5 6 7; do
+        for i in 3 6 7 8; do
             m+=("${BASH_REMATCH[$i]}")
         done
     else
-        echo "\"$BASHGIT_ORIGIN\" did not match any pattern" >&2
+        echo "\"$BASHGIT_ORIGIN\" did not match a url pattern" >&2
         return 1
     fi
 
-    declare -p m
+    if [ -n "$ref" ]; then
+        BASHGIT_HASH="$(git rev-parse "$ref")"
+        [ $? -ne 0 ] && return 1
+    else
+        BASHGIT_CHECK_COMMIT
+    fi
 
-    BASHGIT_CHECK_COMMIT
+    local relpath
+    # TODO: use _PATH_REMOVE_DOTS, implement /./ removal
+    [ -n "$path" ] && relpath="$(realpath --relative-to="$BASHGIT_REPO" "$path")"
 
     local url
-    if [ "${m[0]}" == 'github.com' ]; then
-        url="https://${m[0]}/${m[2]}/${m[3]}"
-        [ -v BASHGIT_HASH ] && url+="/tree/$BASHGIT_HASH"
-        echo "$url"
-    fi
+    case "${BASHGIT_REMOTES["${m[0]}"]}" in
+        github)
+            url="https://${m[0]}/${m[2]}/${m[3]}"
+            if [ -v BASHGIT_HASH ]; then
+                if [ -n "$relpath" ]; then
+                    url+="/blob/$BASHGIT_HASH/$relpath"
+                else
+                    url+="/tree/$BASHGIT_HASH"
+                fi
+            fi
+            echo "$url"
+            ;;
+        bitbucket)
+            if [ "${m[2]:0:1}" == '~' ]; then
+                url="https://${m[0]}/${m[1]}users/${m[2]:1}/repos/${m[3]}/browse"
+            else
+                url="https://${m[0]}/${m[1]}projects/${m[2]}/repos/${m[3]}/browse"
+            fi
+            [ -n "$relpath" ] && url+="/$relpath"
+            [ -v BASHGIT_HASH ] && url+="?at=$BASHGIT_HASH"
+            echo "$url"
+            ;;
+        gitlab)
+            url="https://${m[0]}/${m[1]}${m[2]}/${m[3]}"
+            [ -v BASHGIT_HASH ] && url+="/-/blob/$BASHGIT_HASH"
+            [ -n "$relpath" ] && url+="/$relpath"
+            echo "$url"
+            ;;
+        *)
+            echo "Unexpected origin host type \"${BASHGIT_REMOTES["${m[0]}"]}\"" \
+                 "for host \"${m[0]}\"" >&2
+            return 1
+            ;;
+    esac
 }
