@@ -9,6 +9,7 @@ BASHGIT_COLOR_MISC='\[\033[90m\]'
 BASHGIT_COLOR_BRANCH='\[\033[32m\]'
 BASHGIT_COLOR_NOBRANCH='\[\033[31m\]'
 BASHGIT_COLOR_ORIGIN='\[\033[35m\]'
+
 BASHGIT_HASH_LENGTH=7
 
 BASHGIT_LOG_FORMAT='%C(auto)%h%Creset %s %Cblue(%an, %cd)%Creset%Cgreen%d%Creset'
@@ -466,9 +467,37 @@ br() { # work with submodule branches
     fi
 }
 
-gw() { # Git Web: print link to the online repo
-    BASHGIT_CHECK_REPO
-    BASHGIT_CHECK_ORIGIN || return 1
+remote() { # print link to the origin remote's online interface
+    BASHGIT_CHECK_REPO && BASHGIT_CHECK_ORIGIN || return 1
 
     echo "$BASHGIT_ORIGIN"
+
+    local re_http='^https?://([^/]+)/(.*/)?([^/]+)/([^/]+)\.git'
+    local re_ssh='^ssh://([^@/:]+@)?([^/:]+)(:|(:[0-9]+)?/)(.*/)?([^/]+)/([^/]+)\.git'
+
+    local -a m
+    local i
+    if [[ "$BASHGIT_ORIGIN" =~ $re_http ]]; then
+        for i in 1 2 3 4; do
+            m+=("${BASH_REMATCH[$i]}")
+        done
+    elif [[ "$BASHGIT_ORIGIN" =~ $re_ssh ]]; then
+        for i in 2 5 6 7; do
+            m+=("${BASH_REMATCH[$i]}")
+        done
+    else
+        echo "\"$BASHGIT_ORIGIN\" did not match any pattern" >&2
+        return 1
+    fi
+
+    declare -p m
+
+    BASHGIT_CHECK_COMMIT
+
+    local url
+    if [ "${m[0]}" == 'github.com' ]; then
+        url="https://${m[0]}/${m[2]}/${m[3]}"
+        [ -v BASHGIT_HASH ] && url+="/tree/$BASHGIT_HASH"
+        echo "$url"
+    fi
 }
