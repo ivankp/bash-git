@@ -489,18 +489,23 @@ declare -A BASHGIT_REMOTES=(
 )
 
 remote() { # print link to the origin remote's online interface
-    local path="$1" ref="$2" dir
-    if [ "$path" == '-' ]; then
+    local path ref dir
+    if [ "$1" == '-' ]; then
+        path="$1"
+        ref="$2"
         _FROM_CLIP path path || return 1
-    elif [ "$ref" == '-' ]; then
-        _FROM_CLIP ref path || return 1
-    fi
-    if [ -n "$path" ] && [ ! -e "$path" ]; then
+    elif [ "$2" == '-' ]; then
         ref="$1"
         path="$2"
+        _FROM_CLIP path path || return 1
+    elif [ -n "$1" ] && [ ! -e "$1" ]; then
+        ref="$1"
+        path="$2"
+    else
+        path="$1"
+        ref="$2"
     fi
     if [ -n "$path" ]; then
-        # conver to absolute path
         if [ -d "$path" ]; then
             dir="$path"
         elif [ -f "$path" ]; then
@@ -509,6 +514,7 @@ remote() { # print link to the origin remote's online interface
             echo 'usage: remote [path] [git_ref]' >&2
             return 1
         fi
+        # conver to absolute path
         [ "${dir:0:1}" != '/' ] && dir="$PWD/$path"
     fi
 
