@@ -11,7 +11,7 @@ BASHGIT_COLOR_NOBRANCH='\[\033[31m\]'
 BASHGIT_COLOR_ORIGIN='\[\033[35m\]'
 BASHGIT_HASH_LENGTH=7
 
-BASHGIT_GL_FORMAT='%C(auto)%h%Creset %s %Cblue(%an, %cd)%Creset%Cgreen%d%Creset'
+BASHGIT_LOG_FORMAT='%C(auto)%h%Creset %s %Cblue(%an, %cd)%Creset%Cgreen%d%Creset'
 
 _trap_DEBUG() {
     # save current $SECONDS value
@@ -145,7 +145,7 @@ BASHGIT_CHECK_COMMIT() {
 }
 
 BASHGIT_PROMPT_COMMAND() {
-    local prev_duration=$(( SECONDS - _PREV_SECONDS ))
+    local prev_duration=$((SECONDS - _PREV_SECONDS))
     unset _PREV_SECONDS
 
     PS1="$BASHGIT_COLOR_MISC┌$BASHGIT_COLOR_0 "
@@ -187,7 +187,7 @@ BASHGIT_PROMPT_COMMAND() {
         fi
 
         if BASHGIT_CHECK_ORIGIN; then
-            local re_url='(([^/]+/)?[^/]+)\.git$'
+            local re_url='(([^/:]+/)?[^/]+)\.git$'
             if [[ "$BASHGIT_ORIGIN" =~ $re_url ]]; then
                 origin="${BASH_REMATCH[1]}"
                 PS1+="$BASHGIT_COLOR_ORIGIN$origin$BASHGIT_COLOR_0 "
@@ -223,18 +223,16 @@ super() {
 }
 
 gl() {
-    local OPTIND opt n=8 fmt= date=
-    while getopts ':cd:f:n:' opt; do
+    local OPTIND=1 OPTARG OPTERR opt n=8
+    while getopts ':cn:' opt; do
         case "$opt" in
             c) echo "$(git rev-list --count HEAD) commits" ;;
             n) n="${OPTARG}" ;;
-            d) date="${OPTARG}" ;;
-            f) fmt="${OPTARG}" ;;
         esac
     done
-    shift "$(($OPTIND -1))"
+    shift $((OPTIND - 1))
 
-    git log --date="${date:-relative}" --format="${fmt:-"$BASHGIT_GL_FORMAT"}" -n"$n" "$@"
+    git log -n"$n" --date=relative --format="$BASHGIT_LOG_FORMAT" "$@"
 }
 
 BASHGIT_SM_R() {
