@@ -519,13 +519,16 @@ remote() { # print link to the origin remote's online interface
     fi
 
     local relpath
-    # TODO: use _PATH_REMOVE_DOTS, implement /./ removal
-    [ -n "$path" ] && relpath="$(realpath --relative-to="$BASHGIT_REPO" "$path")"
+    if [ -n "$path" ]; then
+        # TODO: use _PATH_REMOVE_DOTS, implement /./ removal
+        relpath="$(realpath --relative-to="$BASHGIT_REPO" "$path")"
+        [ "$relpath" == '.' ] && relpath=
+    fi
 
     local url
     case "${BASHGIT_REMOTES["${m[0]}"]}" in
         github)
-            url="https://${m[0]}/${m[2]}/${m[3]}"
+            url="https://${m[0]}/${m[1]}${m[2]}/${m[3]}"
             if [ -v BASHGIT_HASH ]; then
                 if [ -n "$relpath" ]; then
                     url+="/blob/$BASHGIT_HASH/$relpath"
@@ -536,11 +539,13 @@ remote() { # print link to the origin remote's online interface
             echo "$url"
             ;;
         bitbucket)
+            url="https://${m[0]}/${m[1]}"
             if [ "${m[2]:0:1}" == '~' ]; then
-                url="https://${m[0]}/${m[1]}users/${m[2]:1}/repos/${m[3]}/browse"
+                url+="users/${m[2]:1}"
             else
-                url="https://${m[0]}/${m[1]}projects/${m[2]}/repos/${m[3]}/browse"
+                url+="projects/${m[2]}"
             fi
+            url+="/repos/${m[3]}/browse"
             [ -n "$relpath" ] && url+="/$relpath"
             [ -v BASHGIT_HASH ] && url+="?at=$BASHGIT_HASH"
             echo "$url"
