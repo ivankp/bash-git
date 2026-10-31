@@ -445,10 +445,9 @@ br_list_heads() {
 }
 
 br() { # work with submodule branches
-    [ -z "$BASHGIT_REPO" ] && return 1
+    BASHGIT_CHECK_REPO || return 1
 
-    local repo="${BASHGIT_SUPER:-$BASHGIT_REPO}"
-    local modules="$repo/.gitmodules"
+    local modules="$BASHGIT_SUPER/.gitmodules"
     [ -f "$modules" ] || return 1
 
     local nullglob_orig="$(shopt -p nullglob)"
@@ -457,11 +456,11 @@ br() { # work with submodule branches
     local line path heads
     local -a full
     local -A names
-    local re_path='^[[:blank:]]*path[[:blank:]]*=[[:blank:]]*(.*[^[:blank:]])'
+    local re='^[[:blank:]]*path[[:blank:]]*=[[:blank:]]*(.*[^[:blank:]])'
     while IFS= read -r line || [ -n "$line" ]; do
-        if [[ "$line" =~ $re_path ]]; then
+        if [[ "$line" =~ $re ]]; then
             path="${BASH_REMATCH[1]}"
-            heads="${repo}/.git/modules/${path}/refs/heads"
+            heads="${BASHGIT_SUPER}/.git/modules/${path}/refs/heads"
             br_list_heads "$heads"
         fi
     done < "$modules"
@@ -473,9 +472,9 @@ br() { # work with submodule branches
             echo "$x"
         done
     elif [ $# -eq 1 ]; then
-        local re_branch="^([^[:blank:]]*/)?$1 (.*)"
+        re="^([^[:blank:]]*/)?$1 (.*)"
         for x in "${full[@]}"; do
-            if [[ "$x" =~ $re_branch ]]; then
+            if [[ "$x" =~ $re ]]; then
                 echo "$x"
             fi
         done
