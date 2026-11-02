@@ -59,21 +59,7 @@ _FROM_CLIP() {
 
 # Recursively find all submodules and run the predicate command for each one
 BASHGIT_MODULES() { # predicate repo_dir [git_dir]
-    local git="$2/.git"
-    if [[ -f $git ]]; then
-        local re='^gitdir:[[:blank:]]*(.*[^[:space:]])'
-        if [[ "$(< "$git")" =~ $re ]]; then
-            local gitdir="${BASH_REMATCH[1]}"
-            if [[ $gitdir != /* ]]; then
-                git="$2/$gitdir"
-                _PATH_REMOVE_DOTS git
-            else
-                git="$gitdir"
-            fi
-        fi
-    fi
-    # [[ -d $git ]] || return 1
-    "$1" "$2" "$git" # invoke predicate
+    "$1" "$2" # invoke the predicate
     local modules="$2/.gitmodules"
     if [[ -f $modules ]]; then
         local line re='^path[[:blank:]]*=[[:blank:]]*(.*[^[:space:]])'
@@ -462,23 +448,32 @@ topic() {
 
 BASHGIT_LIST_HEADS_R() {
     local f
-    for f in "$1"/*; do
+    for f in "$2"/*; do
         if [[ -d $f ]]; then
-            BASHGIT_LIST_HEADS_R "$f" "$2"
+            BASHGIT_LIST_HEADS_R "$1" "$f"
         else
-            # f="${f#$d/}"
-            # echo "$f"
-            full+=("${f#"$heads/"} $2")
-
+            full+=("${f#"$heads/"} $1")
             names["${f##*/}"]=1
-            # echo "$f"
         fi
     done
 }
 
 BASHGIT_LIST_HEADS() {
-    local heads="$2/refs/heads"
-    BASHGIT_LIST_HEADS_R "$heads" "$1"
+    local git="$1/.git"
+    if [[ -f $git ]]; then
+        local re='^gitdir:[[:blank:]]*(.*[^[:space:]])'
+        if [[ "$(< "$git")" =~ $re ]]; then
+            local gitdir="${BASH_REMATCH[1]}"
+            if [[ $gitdir != /* ]]; then
+                git="$1/$gitdir"
+                _PATH_REMOVE_DOTS git
+            else
+                git="$gitdir"
+            fi
+        fi
+    fi
+    local heads="$git/refs/heads"
+    BASHGIT_LIST_HEADS_R "$1" "$heads"
 }
 
 br() { # work with submodule branches
