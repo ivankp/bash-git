@@ -57,6 +57,34 @@ _FROM_CLIP() {
     esac
 }
 
+# Recursively find all submodules and run the predicate command for each one
+BASHGIT_MODULES() { # predicate repo_dir [git_dir]
+    local git="$2/.git"
+    if [[ -f $git ]]; then
+        local re='^gitdir:[[:blank:]]*(.*[^[:space:]])'
+        if [[ "$(< "$git")" =~ $re ]]; then
+            local gitdir="${BASH_REMATCH[1]}"
+            if [[ $gitdir != /* ]]; then
+                git="$2/$gitdir"
+                _PATH_REMOVE_DOTS git
+            else
+                git="$gitdir"
+            fi
+        fi
+    fi
+    # [[ -d $git ]] || return 1
+    "$1" "$2" "$git" # invoke predicate
+    local modules="$2/.gitmodules"
+    if [[ -f $modules ]]; then
+        local line re='^path[[:blank:]]*=[[:blank:]]*(.*[^[:space:]])'
+        while read -r line || [[ -n $line ]]; do
+            if [[ $line =~ $re ]]; then
+                BASHGIT_MODULES "$1" "$2/${BASH_REMATCH[1]}"
+            fi
+        done < "$modules"
+    fi
+}
+
 # Set REPO, SUPER, and GIT paths if we are in a git repo
 BASHGIT_CHECK_REPO() {
     local path="${1:-$PWD}"
@@ -110,6 +138,7 @@ BASHGIT_CHECK_REPO() {
                 if [ -d "$BASHGIT_GIT" ]; then
                     # .git file points to a valid directory
                     BASHGIT_SUPER="$BASHGIT_REPO/${BASH_REMATCH[2]}"
+                    _PATH_REMOVE_DOTS BASHGIT_SUPER
                     return
                 fi
             fi
@@ -431,54 +460,51 @@ topic() {
     fi
 }
 
-br_list_heads() {
+BASHGIT_LIST_HEADS_R() {
     local f
     for f in "$1"/*; do
-        if [ -d "$f" ]; then
-            br_list_heads "$f"
+        if [[ -d $f ]]; then
+            BASHGIT_LIST_HEADS_R "$f" "$2"
         else
-            f="${f#"$heads/"}"
-            full+=("$f $path")
+            # f="${f#$d/}"
+            # echo "$f"
+            full+=("${f#"$heads/"} $2")
+
             names["${f##*/}"]=1
+            # echo "$f"
         fi
     done
+}
+
+BASHGIT_LIST_HEADS() {
+    local heads="$2/refs/heads"
+    BASHGIT_LIST_HEADS_R "$heads" "$1"
 }
 
 br() { # work with submodule branches
     BASHGIT_CHECK_REPO || return 1
 
-    local modules="$BASHGIT_SUPER/.gitmodules"
-    [ -f "$modules" ] || return 1
-
-    local nullglob_orig="$(shopt -p nullglob)"
-    shopt -s nullglob
-
-    local line path heads
     local -a full
     local -A names
-    local re='^[[:blank:]]*path[[:blank:]]*=[[:blank:]]*(.*[^[:blank:]])'
-    while IFS= read -r line || [ -n "$line" ]; do
-        if [[ "$line" =~ $re ]]; then
-            path="${BASH_REMATCH[1]}"
-            heads="${BASHGIT_SUPER}/.git/modules/${path}/refs/heads"
-            br_list_heads "$heads"
-        fi
-    done < "$modules"
 
-    $nullglob_orig
-
-    if [ $# -eq 0 ]; then
-        for x in "${!names[@]}"; do
-            echo "$x"
-        done
-    elif [ $# -eq 1 ]; then
-        re="^([^[:blank:]]*/)?$1 (.*)"
-        for x in "${full[@]}"; do
-            if [[ "$x" =~ $re ]]; then
-                echo "$x"
-            fi
-        done
+    local nullglob
+    if ! shopt -q nullglob; then
+        nullglob=1
+        shopt -s nullglob
     fi
+
+    BASHGIT_MODULES BASHGIT_LIST_HEADS "$BASHGIT_SUPER"
+
+    [[ -n $nullglob ]] && shopt -u nullglob
+
+    local x
+    for x in "${!names[@]}"; do
+        echo "$x"
+    done
+
+    for x in "${full[@]}"; do
+        echo "$x"
+    done
 }
 
 declare -A BASHGIT_REMOTES=(
