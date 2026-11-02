@@ -14,6 +14,10 @@ BASHGIT_HASH_LENGTH=7
 
 BASHGIT_LOG_FORMAT='%C(auto)%h%Creset %s %Cblue(%an, %cd)%Creset%Cgreen%d%Creset'
 
+declare -A BASHGIT_REMOTES=(
+    ['github.com']='github'
+)
+
 _trap_DEBUG() {
     # save current $SECONDS value
     _PREV_SECONDS=${_PREV_SECONDS:-$SECONDS}
@@ -33,22 +37,23 @@ _PATH_REMOVE_DOTS() {
     # /a/b/../c -> /a/c
     while true; do
         right="${ref#*/../}"
-        [ "$right" == "$ref" ] && break
+        [[ $right == $ref ]] && break
         left="${ref%%/../*}"
         left="${left%/*}"
         ref="$left/$right"
     done
     # /a/b/c/.. -> /a/b
     left="${ref%/..}"
-    [ "$left" != "$ref" ] && ref="${left%/*}"
+    [[ $left != $ref ]] && ref="${left%/*}"
 }
 
+# Set the variable with the passed name to the clipboard text
 _FROM_CLIP() {
     local -n ref="$1"
     case "$OSTYPE" in
         msys | cygwin)
             ref="$(< /dev/clipboard)"
-            [ "$2" == path ] && ref="$(cygpath -u "$ref")"
+            [[ $2 == path ]] && ref="$(cygpath -u "$ref")"
             ;;
         *)
             echo 'Not implemented' >&2
@@ -505,7 +510,7 @@ br() { # work with submodule branches
         for x in "$@"; do
             re="^([^[:blank:]]*/)?$x (.*)"
             for x in "${full[@]}"; do
-                if [[ "$x" =~ $re ]]; then
+                if [[ $x =~ $re ]]; then
                     echo "$x"
                 fi
             done
@@ -520,10 +525,6 @@ _complete_br() {
     COMPREPLY=($(compgen -W "$(br)" -- "$2"))
 }
 complete -F _complete_br br
-
-declare -A BASHGIT_REMOTES=(
-    ['github.com']='github'
-)
 
 remote() { # print link to the origin remote's online interface
     local path="$1" ref="$2" dir
