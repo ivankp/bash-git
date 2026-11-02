@@ -493,14 +493,33 @@ br() { # work with submodule branches
     [[ -n $nullglob ]] && shopt -u nullglob
 
     local x
-    for x in "${!names[@]}"; do
-        echo "$x"
-    done
 
-    for x in "${full[@]}"; do
-        echo "$x"
-    done
+    if (( $# == 0 )); then
+        # If no arguments, print list of branch suffixes
+        for x in "${!names[@]}"; do
+            echo "$x"
+        done
+    else
+        # For each argument, print all matching branches and modules
+        local re
+        for x in "$@"; do
+            re="^([^[:blank:]]*/)?$x (.*)"
+            for x in "${full[@]}"; do
+                if [[ "$x" =~ $re ]]; then
+                    echo "$x"
+                fi
+            done
+        done
+    fi
 }
+
+# $1: command name
+# $2: current word
+# $3: preceding word
+_complete_br() {
+    COMPREPLY=($(compgen -W "$(br)" -- "$2"))
+}
+complete -F _complete_br br
 
 declare -A BASHGIT_REMOTES=(
     ['github.com']='github'
