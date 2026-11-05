@@ -81,23 +81,23 @@ BASHGIT_CHECK_REPO() {
     local path="${1:-$PWD}"
     # Inspect current path
     local re='^(.+)/.git(/.*)?$'
-    if [[ "$path" =~ $re ]]; then
+    if [[ $path =~ $re ]]; then
         BASHGIT_SUPER="${BASH_REMATCH[1]}"
         BASHGIT_REPO="$BASHGIT_SUPER"
         BASHGIT_GIT="$BASHGIT_REPO/.git"
         local right="${BASH_REMATCH[2]}"
-        if [[ "$right" == /modules* ]]; then # inside .git/modules
-            while [ -n "$right" ]; do # look for config file
+        if [[ $right == /modules* ]]; then # inside .git/modules
+            while [[ -n $right ]]; do # look for config file
                 local config="$BASHGIT_GIT$right/config"
-                if [ -f "$config" ]; then
+                if [[ -f $config ]]; then
                     # Read repo directory from config file
-                    re='^[[:blank:]]*worktree[[:blank:]]*=[[:blank:]]*(.*[^[:blank:]])'
+                    re='^worktree[[:blank:]]*=[[:blank:]]*(.*[^[:space:]])'
                     local line
-                    while IFS=$'\n' read -r line || [ -n "$line" ]; do
-                        if [[ "$line" =~ $re ]]; then
+                    while read -r line || [[ -n $line ]]; do
+                        if [[ $line =~ $re ]]; then
                             path="${BASH_REMATCH[1]}"
-                            [ "${path:0:1}" != '/' ] && path="$BASHGIT_GIT$right/$path"
-                            if [ -d "$path" ]; then
+                            [[ ${path:0:1} != / ]] && path="$BASHGIT_GIT$right/$path"
+                            if [[ -d $path ]]; then
                                 _PATH_REMOVE_DOTS path
                                 BASHGIT_REPO="$path"
                                 BASHGIT_GIT="$BASHGIT_GIT$right"
@@ -107,7 +107,7 @@ BASHGIT_CHECK_REPO() {
                         fi
                     done < "$config"
                 fi
-                right=${right%/*} # go one directory level up
+                right="${right%/*}" # go one directory level up
             done
         fi
         return
@@ -411,40 +411,42 @@ _complete_sm() {
 complete -F _complete_sm sm
 
 topic() {
-    [ $# -gt 1 ] || [ -z "$BASHGIT_REPO" ] && return 1
+    (( $# <= 1 )) && BASHGIT_CHECK_REPO || return 1
 
     local branch="$BASHGIT_BRANCH"
-    if [ -z "$branch" ]; then
-        # HEAD does not point to a branch
-        [ -z "$BASHGIT_SUPER" ] && return 1 # no super repo
+    if [[ -z $branch ]]; then # HEAD does not point to a branch
+        local modules="$BASHGIT_SUPER/.gitmodules"
+        # TODO: Look at the direct parent repo instead
+        [[ -f $modules ]] || return 1
 
         # Get branch name from .gitmodules
-        local line path
+        branch=
+        local line path found
         local re_submodule='^\[submodule[[:blank:]]'
-        local re_value='^[[:blank:]]*(path|branch)[[:blank:]]*=[[:blank:]]*(.+)'
-        while IFS=$'\n' read -r line; do
-            if [[ "$line" =~ $re_submodule ]]; then
-                if [ -n "$path" ] && [ "$BASHGIT_SUPER/$path" -ef "$BASHGIT_REPO" ]; then
-                    unset path
+        local re_value='^(path|branch)[[:blank:]]*=[[:blank:]]*(.*[^[:space:]])'
+        while read -r line; do
+            if [[ $line =~ $re_submodule ]]; then
+                if [[ -n $path && $BASHGIT_SUPER/$path -ef $BASHGIT_REPO ]]; then
+                    found=1
                     break
                 else
-                    unset path branch
+                    path=
+                    branch=
                 fi
-            elif [[ "$line" =~ $re_value ]]; then
+            elif [[ $line =~ $re_value ]]; then
                 declare "${BASH_REMATCH[1]}=${BASH_REMATCH[2]}"
             fi
-        done < "$BASHGIT_SUPER/.gitmodules" || return 1
-        if ! [ -n "$path" ] && [ "$BASHGIT_SUPER/$path" -ef "$BASHGIT_REPO" ]; then
-            unset branch
+        done < "$modules"
+        if [[ -z $found ]]; then
+            [[ -n $path && $BASHGIT_SUPER/$path -ef $BASHGIT_REPO ]] || branch=
         fi
-        unset path
+
+        [[ -z $branch ]] && return 1
     fi
 
-    if [[ "$branch" =~ ^topic/(.+)/.+ ]]; then
-        branch="${BASH_REMATCH[1]}"
-    fi
+    [[ $branch =~ ^topic/(.+)/.+ ]] && branch="${BASH_REMATCH[1]}"
 
-    if [ $# -eq 1 ]; then
+    if (( $# == 1 )); then
         git switch -c "topic/$branch/$1"
     else
         echo "git switch -c topic/$branch/"
