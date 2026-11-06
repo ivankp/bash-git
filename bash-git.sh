@@ -421,25 +421,25 @@ topic() {
 
         # Get branch name from .gitmodules
         branch=
-        local line path found
+        local line last path s
         local re_submodule='^\[submodule[[:blank:]]'
         local re_value='^(path|branch)[[:blank:]]*=[[:blank:]]*(.*[^[:space:]])'
-        while read -r line; do
-            if [[ $line =~ $re_submodule ]]; then
+
+        while read -r line || last=1; do
+            if [[ -n $s && $line =~ $re_value ]]; then
+                declare "${BASH_REMATCH[1]}=${BASH_REMATCH[2]}"
+            fi
+            if [[ -n $last || $line == [* ]]; then
                 if [[ -n $path && $BASHGIT_SUPER/$path -ef $BASHGIT_REPO ]]; then
-                    found=1
                     break
                 else
                     path=
                     branch=
                 fi
-            elif [[ $line =~ $re_value ]]; then
-                declare "${BASH_REMATCH[1]}=${BASH_REMATCH[2]}"
+                [[ $line =~ $re_submodule ]] && s=1 || s=
             fi
+            [[ -n $last ]] && break
         done < "$modules"
-        if [[ -z $found ]]; then
-            [[ -n $path && $BASHGIT_SUPER/$path -ef $BASHGIT_REPO ]] || branch=
-        fi
 
         [[ -z $branch ]] && return 1
     fi
