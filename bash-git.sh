@@ -624,3 +624,27 @@ remote() { # print link to the origin remote's online interface
             ;;
     esac
 }
+
+amend() {
+    local OPTIND=1 OPTARG OPTERR opt edit push args=()
+    while getopts ':aedph' opt; do
+        case "$opt" in
+            a) args+=('--all') ;;
+            e) edit=1 ;;
+            d) args+=('--date=now') ;;
+            p) push=1 ;;
+            h) echo 'usage: amend [-a] [-e] [-d] [-p] [-h]
+options:
+  -a: `commit --all`
+  -e: no `commit --no-edit`
+  -d: `commit --date=now`
+  -p: `git push --force-with-lease`
+  -h: print this help message and exit'; return ;;
+        esac
+    done
+    shift $((OPTIND - 1))
+
+    [[ -z $edit ]] && args+=('--no-edit')
+
+    git commit --amend "${args[@]}" "$@" && [[ -n $push ]] && git push --force-with-lease
+}
