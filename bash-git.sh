@@ -63,7 +63,7 @@ _FROM_CLIP() {
 }
 
 # Recursively find all submodules and run the predicate command for each one
-BASHGIT_MODULES() { # predicate repo_dir [git_dir]
+BASHGIT_MODULES() { # predicate repo_path
     "$1" "$2" # invoke the predicate
     local modules="$2/.gitmodules"
     if [[ -f $modules ]]; then
