@@ -429,7 +429,7 @@ topic() {
             if [[ -n $s && $line =~ $re_value ]]; then
                 declare "${BASH_REMATCH[1]}=${BASH_REMATCH[2]}"
             fi
-            if [[ -n $last || $line == [* ]]; then
+            if [[ -n $last || $line == '['* ]]; then
                 if [[ -n $path && $BASHGIT_SUPER/$path -ef $BASHGIT_REPO ]]; then
                     break
                 else
