@@ -276,7 +276,7 @@ BASHGIT_PROMPT_COMMAND() {
 
         if BASHGIT_CHECK_ORIGIN; then
             local re_url='(([^/:]+/)?[^/]+)\.git$'
-            if [[ "$BASHGIT_ORIGIN" =~ $re_url ]]; then
+            if [[ $BASHGIT_ORIGIN =~ $re_url ]]; then
                 origin="${BASH_REMATCH[1]}"
                 PS1+="$BASHGIT_COLOR_ORIGIN$origin$BASHGIT_COLOR_0 "
             fi
@@ -285,7 +285,7 @@ BASHGIT_PROMPT_COMMAND() {
 
     # current directory
     local cwd="$PWD"
-    [[ "$cwd" =~ ^"$HOME"/? ]] && cwd="~${cwd#$HOME}"
+    [[ $cwd =~ ^"$HOME"/? ]] && cwd="~${cwd#$HOME}"
     # color slashes
     PS1+="${cwd//\//$BASHGIT_COLOR_MISC/$BASHGIT_COLOR_0}"
 
@@ -334,7 +334,7 @@ BASHGIT_SM_R() {
         # read .gitmodules
         local re='^[[:space:]]*(path)[[:space:]]*=[[:space:]]*(.+)'
         while IFS=$'\r\n' read -r line; do
-            if [[ "$line" =~ $re ]]; then
+            if [[ $line =~ $re ]]; then
                 BASHGIT_SM_R "${BASH_REMATCH[2]}" "${@:2}"
             fi
         done < ".gitmodules"
@@ -344,21 +344,25 @@ BASHGIT_SM_R() {
 }
 
 sm() { # navigate git submodules with fzf
-    local OPTIND=1 OPTARG OPTERR opt run u repo
-    while getopts ':ruxh' opt; do
+    local OPTIND=1 OPTARG OPTERR o p run u repo
+    while getopts ':opruxh' opt; do
         case "$opt" in
+            o) o=1 ;;
+            p) p=1 ;;
             r) run=1 ;;
             u) u=1 ;;
             x) repo=1 ;;
             h) break ;;
-            \?) opt=h; echo "unexpected option -$OPTARG" >&2 ;;
+            \?) opt=h; echo "unexpected option -$OPTARG" >&2; break ;;
         esac
     done
 
     if [[ $opt == h || "$run$u" > 1 ]]; then
         [[ $opt != h ]] && echo 'conflicting options specified' >&2
-        echo 'usage: sm [-r] [-u] [-x] [-h]
+        echo 'usage: sm [-o] [-r] [-u] [-x] [-h]
 options:
+  -o: include origin in the list
+  -p: print list of submodules
   -r: run command for every submodule recursively
   -u: update all submodules
   -u [submodule...]: update specified submodules
@@ -388,15 +392,22 @@ options:
     fi
 
     local sm_modules=()
+    local re_origin='(([^/:]+/)?[^/]+)\.git$'
     sm_predicate() {
-        # local git="$1/.git"
-        # BASHGIT_RESOLVE_GIT git && BASHGIT_CHECK_ORIGIN "$git" && \
-        #     sm_modules+=("$BASHGIT_ORIGIN $git")
-        sm_modules+=("$1")
+        if [[ $o == 1 ]]; then
+            local git="$1/.git"
+            if BASHGIT_RESOLVE_GIT git && BASHGIT_CHECK_ORIGIN "$git"; then
+                if [[ $BASHGIT_ORIGIN =~ $re_origin ]]; then
+                    sm_modules+=("${BASH_REMATCH[1]} $1")
+                fi
+            fi
+        else
+            sm_modules+=("$1")
+        fi
     }
     BASHGIT_MODULES sm_predicate "$repo"
 
-    if command -v fzf &> /dev/null; then
+    if [[ -z $p ]] && command -v fzf &> /dev/null; then
         local x="$(printf '%s\n' "${sm_modules[@]}" | fzf -i -q "$1")"
         [[ -n $x ]] && cd "$x"
     else
@@ -532,7 +543,7 @@ complete -F _complete_br br
 
 remote() { # print link to the origin remote's online interface
     local path="$1" ref="$2" dir
-    if [[ "$1" != '-' && ( "$2" == '-' || ( -n "$1" && ! -e "$1" )) ]]; then
+    if [[ $1 != '-' && ( "$2" == '-' || ( -n "$1" && ! -e "$1" )) ]]; then
         ref="$1"
         path="$2"
     fi
@@ -559,11 +570,11 @@ remote() { # print link to the origin remote's online interface
 
     local -a m
     local i
-    if [[ "$BASHGIT_ORIGIN" =~ $re_http ]]; then
+    if [[ $BASHGIT_ORIGIN =~ $re_http ]]; then
         for i in 1 2 3 4; do
             m+=("${BASH_REMATCH[$i]}")
         done
-    elif [[ "$BASHGIT_ORIGIN" =~ $re_ssh ]]; then
+    elif [[ $BASHGIT_ORIGIN =~ $re_ssh ]]; then
         for i in 3 6 7 8; do
             m+=("${BASH_REMATCH[$i]}")
         done
