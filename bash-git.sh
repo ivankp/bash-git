@@ -32,28 +32,28 @@ BASHGIT_PS0="$BASHGIT_COLOR_MISC└ \D{%I:%M:%S %P}$BASHGIT_COLOR_0\n"
 _BASHGIT_NJOBS0=''
 
 _PATH_REMOVE_DOTS() {
-    local -n ref="$1"
+    local -n _ref="$1"
     local right left
     # /a/b/../c -> /a/c
     while true; do
-        right="${ref#*/../}"
-        [[ $right == $ref ]] && break
-        left="${ref%%/../*}"
+        right="${_ref#*/../}"
+        [[ $right == $_ref ]] && break
+        left="${_ref%%/../*}"
         left="${left%/*}"
-        ref="$left/$right"
+        _ref="$left/$right"
     done
     # /a/b/c/.. -> /a/b
-    left="${ref%/..}"
-    [[ $left != $ref ]] && ref="${left%/*}"
+    left="${_ref%/..}"
+    [[ $left != $_ref ]] && _ref="${left%/*}"
 }
 
 # Set the variable with the passed name to the clipboard text
 _FROM_CLIP() {
-    local -n ref="$1"
+    local -n _ref="$1"
     case "$OSTYPE" in
         msys | cygwin)
-            ref="$(< /dev/clipboard)"
-            [[ $2 == path ]] && ref="$(cygpath -u "$ref")"
+            _ref="$(< /dev/clipboard)"
+            [[ $2 == path ]] && _ref="$(cygpath -u "$_ref")"
             ;;
         *)
             echo 'Not implemented' >&2
@@ -62,17 +62,35 @@ _FROM_CLIP() {
     esac
 }
 
+BASHGIT_RESOLVE_GIT() {
+    local -n _git="$1"
+    if [[ -f $_git ]]; then
+        local re='^gitdir:[[:blank:]]*(.*[^[:space:]])'
+        if [[ "$(< "$_git")" =~ $re ]]; then
+            local gitdir="${BASH_REMATCH[1]}"
+            if [[ $gitdir != /* ]]; then
+                _git="$_git/../$gitdir"
+                _PATH_REMOVE_DOTS _git
+            else
+                _git="$gitdir"
+            fi
+        fi
+    elif [[ ! -d $_git ]]; then
+        return 1
+    fi
+    return 0
+}
+
 # Recursively find all submodules and run the predicate command for each one
 BASHGIT_MODULES() { # predicate repo_path
     "$1" "$2" # invoke the predicate
-    local modules="$2/.gitmodules"
-    if [[ -f $modules ]]; then
+    if [[ -f "$2/.gitmodules" ]]; then
         local line re='^path[[:blank:]]*=[[:blank:]]*(.*[^[:space:]])'
         while read -r line || [[ -n $line ]]; do
             if [[ $line =~ $re ]]; then
                 BASHGIT_MODULES "$1" "$2/${BASH_REMATCH[1]}"
             fi
-        done < "$modules"
+        done < "$2/.gitmodules"
     fi
 }
 
@@ -101,7 +119,7 @@ BASHGIT_CHECK_REPO() {
                                 _PATH_REMOVE_DOTS path
                                 BASHGIT_REPO="$path"
                                 BASHGIT_GIT="$BASHGIT_GIT$right"
-                                return
+                                return 0
                             fi
                             break
                         fi
@@ -110,7 +128,7 @@ BASHGIT_CHECK_REPO() {
                 right="${right%/*}" # go one directory level up
             done
         fi
-        return
+        return 0
     fi
 
     # Descend into parent directories one by one
@@ -119,7 +137,7 @@ BASHGIT_CHECK_REPO() {
         BASHGIT_GIT="$BASHGIT_REPO/.git"
         if [[ -d $BASHGIT_GIT ]]; then # if .git is a directory
             BASHGIT_SUPER="$BASHGIT_REPO"
-            return
+            return 0
         elif [[ -f $BASHGIT_GIT ]]; then # if .git is a file
             # this is a submodule
             re='^gitdir:[[:blank:]]*((.*)/\.git.*)'
@@ -130,7 +148,7 @@ BASHGIT_CHECK_REPO() {
                     # .git file points to a valid directory
                     BASHGIT_SUPER="$BASHGIT_REPO/${BASH_REMATCH[2]}"
                     _PATH_REMOVE_DOTS BASHGIT_SUPER
-                    return
+                    return 0
                 fi
             fi
         fi
@@ -147,7 +165,7 @@ BASHGIT_CHECK_PARENT() {
     while [[ $git =~ $re ]]; do
         if [[ -z "${BASH_REMATCH[2]}" ]]; then
             BASHGIT_PARENT="${BASH_REMATCH[1]%/*}"
-            return
+            return 0
         fi
         git="${BASH_REMATCH[1]}"
 
@@ -162,7 +180,7 @@ BASHGIT_CHECK_PARENT() {
                     if [[ -d $line ]]; then
                         _PATH_REMOVE_DOTS line
                         BASHGIT_PARENT="$line"
-                        return
+                        return 0
                     fi
                     break 2
                 fi
@@ -177,19 +195,20 @@ BASHGIT_CHECK_PARENT() {
 # git config --get remote.origin.url
 BASHGIT_CHECK_ORIGIN() {
     unset BASHGIT_ORIGIN
-    [[ -v BASHGIT_GIT ]] || return 1
+    local git="${1:-$BASHGIT_GIT}"
+    [[ -z $git ]] && return 1
 
     local re_origin='^\[remote[[:blank:]]+"origin"\]'
     local re_url='^[[:blank:]]*url[[:blank:]]*=[[:blank:]]*(.*[^[:space:]])'
     local line
     while read -r line || [[ -n $line ]]; do
-        if [[ -v re_origin ]]; then
-            [[ $line =~ $re_origin ]] && unset re_origin
+        if [[ -n $re_origin ]]; then
+            [[ $line =~ $re_origin ]] && re_origin=
         elif [[ $line =~ $re_url ]]; then
             BASHGIT_ORIGIN="${BASH_REMATCH[1]}"
-            return
+            return 0
         fi
-    done < "$BASHGIT_GIT/config"
+    done < "$git/config"
 
     return 1
 }
@@ -210,6 +229,7 @@ BASHGIT_CHECK_COMMIT() {
             return 1
         fi
     fi
+    return 0
 }
 
 BASHGIT_PROMPT_COMMAND() {
@@ -324,102 +344,64 @@ BASHGIT_SM_R() {
 }
 
 sm() { # navigate git submodules with fzf
-    [ -z "$BASHGIT_REPO" ] && return 1
-
-    local repo="${BASHGIT_SUPER:-$BASHGIT_REPO}"
-    local modules="$repo/.gitmodules"
-    [ -f "$modules" ] || return 1
-
-    local update
-    local args=()
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            -h)
-                echo "\
--h: help
--u: update all submodules
--u [submodule...]: update specified submodules
--r: run command for every submodule recursively searching for submodules
--x: start at current submodule rather than the super repo"
-                return
-                ;;
-            -u)
-                shift
-                update=()
-                while [ $# -gt 0 ]; do
-                    case "$1" in
-                        -*) break ;;
-                        *)
-                            update+=("$1")
-                            shift
-                            ;;
-                    esac
-                done
-                [ -v update ] || update+=(--recursive)
-                update=(git submodule update --init "${update[@]}")
-                ;;
-            -r)
-                shift
-                # find parent directory containing .git directory
-                # local super="$PWD"
-                # while [ -n "$super" ]; do # look for .git
-                #     if [ -d "$super/.git" ]; then # .git is a directory
-                #         BASHGIT_SM_R "$super" "$@"
-                #         return $?
-                #     fi
-                #     super=${super%/*} # go one directory level deeper
-                # done
-                # return 1
-
-                BASHGIT_SM_R "${opt_x:-$repo}" "$@"
-                return
-                ;;
-            -x)
-                shift
-                local opt_x="$BASHGIT_REPO"
-                ;;
-            --)
-                shift
-                break
-                ;;
-            -*)
-                echo "Unrecognized option $1" >&2
-                return 1
-                ;;
-            *)
-                args+=("$1")
-                shift
-                ;;
+    local OPTIND=1 OPTARG OPTERR opt run u repo
+    while getopts ':ruxh' opt; do
+        case "$opt" in
+            r) run=1 ;;
+            u) u=1 ;;
+            x) repo=1 ;;
+            h) break ;;
+            \?) opt=h; echo "unexpected option -$OPTARG" >&2 ;;
         esac
     done
 
-    if [ -v update ]; then
-        (
-            set -x
-            cd "$repo"
-            "${update[@]}"
-        )
+    if [[ $opt == h || "$run$u" > 1 ]]; then
+        [[ $opt != h ]] && echo 'conflicting options specified' >&2
+        echo 'usage: sm [-r] [-u] [-x] [-h]
+options:
+  -r: run command for every submodule recursively
+  -u: update all submodules
+  -u [submodule...]: update specified submodules
+  -x: start at current repo rather than the super repo
+  -h: print this help message and exit'
+        return 1
+    fi
+
+    shift $((OPTIND - 1))
+
+    BASHGIT_CHECK_REPO || return 1
+
+    [[ $repo == 1 ]] && repo="$BASHGIT_REPO" || repo="$BASHGIT_SUPER"
+
+    if [[ $u == 1 ]]; then
+        (( $# == 0 )) && set -- '--recursive'
+        git submodule update --init "$@"
         return
     fi
 
-    # TODO: go into submodules of submodules
-    # modules="$(BASHGIT_SM_R "$BASHGIT_SUPER" | sort | fzf -i -q "${args[*]}")"
+    if [[ $run == 1 ]]; then
+        run=("$@")
+        (( ${#run[@]} == 0 )) && run=('echo')
+        sm_predicate() { "${run[@]}" "$1"; }
+        BASHGIT_MODULES sm_predicate "$repo"
+        return
+    fi
 
-    modules="$(awk '
-        match($0, /^\[submodule[[:blank:]]+"([^"]+)"\]/, m) {
-            if (NR>1) { printf "\n" }
-            printf "%s", m[1];
-            next
-        }
-        match($0, /^[[:blank:]]*path[[:blank:]]*=[[:blank:]]*(.+)/, m) {
-            printf " %s", m[1];
-            next
-        }
-        END {
-            printf "\n"
-        }' "$modules" | sort | fzf -i -q "${args[*]}")"
+    local sm_modules=()
+    sm_predicate() {
+        # local git="$1/.git"
+        # BASHGIT_RESOLVE_GIT git && BASHGIT_CHECK_ORIGIN "$git" && \
+        #     sm_modules+=("$BASHGIT_ORIGIN $git")
+        sm_modules+=("$1")
+    }
+    BASHGIT_MODULES sm_predicate "$repo"
 
-    [ -n "$modules" ] && cd "$repo/${modules##* }"
+    if command -v fzf &> /dev/null; then
+        local x="$(printf '%s\n' "${sm_modules[@]}" | fzf -i -q "$1")"
+        [[ -n $x ]] && cd "$x"
+    else
+        printf '%s\n' "${sm_modules[@]}"
+    fi
 }
 
 _complete_sm() {
@@ -497,20 +479,10 @@ BASHGIT_LIST_HEADS_R() {
 
 BASHGIT_LIST_HEADS() {
     local git="$1/.git"
-    if [[ -f $git ]]; then
-        local re='^gitdir:[[:blank:]]*(.*[^[:space:]])'
-        if [[ "$(< "$git")" =~ $re ]]; then
-            local gitdir="${BASH_REMATCH[1]}"
-            if [[ $gitdir != /* ]]; then
-                git="$1/$gitdir"
-                _PATH_REMOVE_DOTS git
-            else
-                git="$gitdir"
-            fi
-        fi
+    if BASHGIT_RESOLVE_GIT git; then
+        local heads="$git/refs/heads"
+        BASHGIT_LIST_HEADS_R "$1" "$heads"
     fi
-    local heads="$git/refs/heads"
-    BASHGIT_LIST_HEADS_R "$1" "$heads"
 }
 
 br() { # work with submodule branches
@@ -669,7 +641,7 @@ options:
   -e: no `commit --no-edit`
   -d: `commit --date=now`
   -p: `git push --force-with-lease`
-  -h: print this help message and exit'; return ;;
+  -h: print this help message and exit'; return 0 ;;
         esac
     done
     shift $((OPTIND - 1))
