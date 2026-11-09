@@ -323,27 +323,7 @@ gl() {
     git log -n"$n" --date=relative --format="$BASHGIT_LOG_FORMAT" "$@"
 }
 
-BASHGIT_SM_R() {
-    pushd "$1" > /dev/null || exit 1
-
-    echo "$PWD"
-    [ $# -gt 1 ] && "${@:2}"
-
-    # check if .gitmodules file exists
-    if [ -f ".gitmodules" ]; then
-        # read .gitmodules
-        local re='^[[:space:]]*(path)[[:space:]]*=[[:space:]]*(.+)'
-        while IFS=$'\r\n' read -r line; do
-            if [[ $line =~ $re ]]; then
-                BASHGIT_SM_R "${BASH_REMATCH[2]}" "${@:2}"
-            fi
-        done < ".gitmodules"
-    fi
-
-    popd > /dev/null
-}
-
-sm() { # navigate git submodules with fzf
+sm() { # navigate git submodules
     local OPTIND=1 OPTARG OPTERR o p run u repo
     while getopts ':opruxh' opt; do
         case "$opt" in
@@ -375,15 +355,15 @@ options:
 
     BASHGIT_CHECK_REPO || return 1
 
-    [[ $repo == 1 ]] && repo="$BASHGIT_REPO" || repo="$BASHGIT_SUPER"
+    [[ -n $repo ]] && repo="$BASHGIT_REPO" || repo="$BASHGIT_SUPER"
 
-    if [[ $u == 1 ]]; then
+    if [[ -n $u ]]; then # update submodules
         (( $# == 0 )) && set -- '--recursive'
         git submodule update --init "$@"
         return
     fi
 
-    if [[ $run == 1 ]]; then
+    if [[ -n $run ]]; then # run a command for each submodules
         run=("$@")
         (( ${#run[@]} == 0 )) && run=('echo')
         sm_predicate() { "${run[@]}" "$1"; }
@@ -391,20 +371,24 @@ options:
         return
     fi
 
+    # default behavior: select a submodule
+
     local sm_modules=()
     local re_origin='(([^/:]+/)?[^/]+)\.git$'
-    sm_predicate() {
-        if [[ $o == 1 ]]; then
+    if [[ $o == 1 ]]; then
+        sm_predicate() {
             local git="$1/.git"
             if BASHGIT_RESOLVE_GIT git && BASHGIT_CHECK_ORIGIN "$git"; then
                 if [[ $BASHGIT_ORIGIN =~ $re_origin ]]; then
                     sm_modules+=("${BASH_REMATCH[1]} $1")
                 fi
             fi
-        else
+        }
+    else
+        sm_predicate() {
             sm_modules+=("$1")
-        fi
-    }
+        }
+    fi
     BASHGIT_MODULES sm_predicate "$repo"
 
     if [[ -z $p ]] && command -v fzf &> /dev/null; then
