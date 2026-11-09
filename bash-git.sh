@@ -20,7 +20,7 @@ declare -A BASHGIT_REMOTES=(
 
 _trap_DEBUG() {
     # save current $SECONDS value
-    _PREV_SECONDS=${_PREV_SECONDS:-$SECONDS}
+    _PREV_SECONDS="${_PREV_SECONDS:-$SECONDS}"
 }
 trap _trap_DEBUG DEBUG # execute before every command
 
@@ -115,18 +115,18 @@ BASHGIT_CHECK_REPO() {
 
     # Descend into parent directories one by one
     BASHGIT_REPO="$path"
-    while [ -n "$BASHGIT_REPO" ]; do # look for .git
+    while [[ -n $BASHGIT_REPO ]]; do # look for .git
         BASHGIT_GIT="$BASHGIT_REPO/.git"
-        if [ -d "$BASHGIT_GIT" ]; then # if .git is a directory
+        if [[ -d $BASHGIT_GIT ]]; then # if .git is a directory
             BASHGIT_SUPER="$BASHGIT_REPO"
             return
-        elif [ -f "$BASHGIT_GIT" ]; then # if .git is a file
+        elif [[ -f $BASHGIT_GIT ]]; then # if .git is a file
             # this is a submodule
             re='^gitdir:[[:blank:]]*((.*)/\.git.*)'
             if [[ "$(< "$BASHGIT_GIT")" =~ $re ]]; then
                 BASHGIT_GIT="${BASH_REMATCH[1]}"
-                [[ "$BASHGIT_GIT" != /* ]] && BASHGIT_GIT="$BASHGIT_REPO/$BASHGIT_GIT"
-                if [ -d "$BASHGIT_GIT" ]; then
+                [[ $BASHGIT_GIT != /* ]] && BASHGIT_GIT="$BASHGIT_REPO/$BASHGIT_GIT"
+                if [[ -d $BASHGIT_GIT ]]; then
                     # .git file points to a valid directory
                     BASHGIT_SUPER="$BASHGIT_REPO/${BASH_REMATCH[2]}"
                     _PATH_REMOVE_DOTS BASHGIT_SUPER
@@ -134,10 +134,42 @@ BASHGIT_CHECK_REPO() {
                 fi
             fi
         fi
-        BASHGIT_REPO=${BASHGIT_REPO%/*} # go one directory level up
+        BASHGIT_REPO="${BASHGIT_REPO%/*}" # go one directory level up
     done
 
     unset BASHGIT_{REPO,SUPER,GIT}
+    return 1
+}
+
+BASHGIT_CHECK_PARENT() {
+    unset BASHGIT_PARENT
+    local re='(.*/\.git(/.+)?)/modules/.*[^[:space:]]' git="$BASHGIT_GIT"
+    while [[ $git =~ $re ]]; do
+        if [[ -z "${BASH_REMATCH[2]}" ]]; then
+            BASHGIT_PARENT="${BASH_REMATCH[1]%/*}"
+            return
+        fi
+        git="${BASH_REMATCH[1]}"
+
+        if [[ -f "$git/config" ]]; then
+            # Read repo directory from config file
+            re='^worktree[[:blank:]]*=[[:blank:]]*(.*[^[:space:]])'
+            local line
+            while read -r line || [[ -n $line ]]; do
+                if [[ $line =~ $re ]]; then
+                    line="${BASH_REMATCH[1]}"
+                    [[ ${line:0:1} != / ]] && line="$git/$line"
+                    if [[ -d $line ]]; then
+                        _PATH_REMOVE_DOTS line
+                        BASHGIT_PARENT="$line"
+                        return
+                    fi
+                    break 2
+                fi
+            done < "$git/config"
+            break
+        fi
+    done
     return 1
 }
 
@@ -145,15 +177,15 @@ BASHGIT_CHECK_REPO() {
 # git config --get remote.origin.url
 BASHGIT_CHECK_ORIGIN() {
     unset BASHGIT_ORIGIN
-    [ -v BASHGIT_GIT ] || return 1
+    [[ -v BASHGIT_GIT ]] || return 1
 
     local re_origin='^\[remote[[:blank:]]+"origin"\]'
-    local re_url='^[[:blank:]]*url[[:blank:]]*=[[:blank:]]*(.*[^[:blank:]])'
+    local re_url='^[[:blank:]]*url[[:blank:]]*=[[:blank:]]*(.*[^[:space:]])'
     local line
-    while IFS=$'\n' read -r line || [ -n "$line" ]; do
-        if [ -v re_origin ]; then
-            [[ "$line" =~ $re_origin ]] && unset re_origin
-        elif [[ "$line" =~ $re_url ]]; then
+    while read -r line || [[ -n $line ]]; do
+        if [[ -v re_origin ]]; then
+            [[ $line =~ $re_origin ]] && unset re_origin
+        elif [[ $line =~ $re_url ]]; then
             BASHGIT_ORIGIN="${BASH_REMATCH[1]}"
             return
         fi
@@ -164,14 +196,14 @@ BASHGIT_CHECK_ORIGIN() {
 
 BASHGIT_CHECK_COMMIT() {
     unset BASHGIT_{HASH,BRANCH}
-    [ -v BASHGIT_GIT ] || return 1
+    [[ -v BASHGIT_GIT ]] || return 1
 
     BASHGIT_HASH="$(< "$BASHGIT_GIT/HEAD")"
     local re_ref='^ref:[[:blank:]]*(refs/heads/(.+))'
-    if [[ "$BASHGIT_HASH" =~ $re_ref ]]; then
+    if [[ $BASHGIT_HASH =~ $re_ref ]]; then
         BASHGIT_BRANCH="${BASH_REMATCH[2]}"
         local ref="$BASHGIT_GIT/${BASH_REMATCH[1]}"
-        if [ -f "$ref" ]; then
+        if [[ -f $ref ]]; then
             BASHGIT_HASH="$(< "$ref")"
         else
             unset BASHGIT_{HASH,BRANCH}
@@ -411,13 +443,11 @@ _complete_sm() {
 complete -F _complete_sm sm
 
 topic() {
-    (( $# <= 1 )) && BASHGIT_CHECK_REPO || return 1
+    (( $# < 2 )) && BASHGIT_CHECK_REPO || return 1
 
     local branch="$BASHGIT_BRANCH"
     if [[ -z $branch ]]; then # HEAD does not point to a branch
-        local modules="$BASHGIT_SUPER/.gitmodules"
-        # TODO: Look at the direct parent repo instead
-        [[ -f $modules ]] || return 1
+        BASHGIT_CHECK_PARENT && [[ -f "$BASHGIT_PARENT/.gitmodules" ]] || return 1
 
         # Get branch name from .gitmodules
         branch=
@@ -430,7 +460,7 @@ topic() {
                 declare "${BASH_REMATCH[1]}=${BASH_REMATCH[2]}"
             fi
             if [[ -n $last || $line == '['* ]]; then
-                if [[ -n $path && $BASHGIT_SUPER/$path -ef $BASHGIT_REPO ]]; then
+                if [[ -n $path && $BASHGIT_PARENT/$path -ef $BASHGIT_REPO ]]; then
                     break
                 else
                     path=
@@ -439,7 +469,7 @@ topic() {
                 [[ $line =~ $re_submodule ]] && s=1 || s=
             fi
             [[ -n $last ]] && break
-        done < "$modules"
+        done < "$BASHGIT_PARENT/.gitmodules"
 
         [[ -z $branch ]] && return 1
     fi
