@@ -257,7 +257,7 @@ BASHGIT_PROMPT_COMMAND() {
     PS1+='${_BASHGIT_NJOBS\j-\[\033[33m\][\j]\[\033[0m\] }'
 
     # python virtual environment
-    [ -n "$VIRTUAL_ENV" ] && PS1+="🐍 "
+    [[ -n $VIRTUAL_ENV ]] && PS1+="🐍 "
 
     # git
     unset BASHGIT_{HASH,BRANCH,ORIGIN}
@@ -267,7 +267,7 @@ BASHGIT_PROMPT_COMMAND() {
             # add short hash and branch name to PS1
             local color="$BASHGIT_COLOR_NOBRANCH"
             local commit="${BASHGIT_HASH:0:$BASHGIT_HASH_LENGTH}"
-            if [ -v BASHGIT_BRANCH ]; then
+            if [[ -v BASHGIT_BRANCH ]]; then
                 color="$BASHGIT_COLOR_BRANCH"
                 commit+=" $BASHGIT_BRANCH"
             fi
@@ -317,7 +317,7 @@ BASHGIT_LIST_HEADS_R() {
             BASHGIT_LIST_HEADS_R "$1" "$f"
         else
             full+=("${f#"$heads/"} $1")
-            names["${f##*/}"]=1
+            names[${f##*/}]=1
         fi
     done
 }
@@ -490,24 +490,24 @@ complete -F _complete_sm sm
 
 remote() { # print link to the origin remote's online interface
     local path="$1" ref="$2" dir
-    if [[ $1 != '-' && ( "$2" == '-' || ( -n "$1" && ! -e "$1" )) ]]; then
+    if [[ $1 != - && ( $2 == - || ( -n $1 && ! -e $1 )) ]]; then
         ref="$1"
         path="$2"
     fi
-    if [ "$path" == '-' ]; then
+    if [[ $path == - ]]; then
         _FROM_CLIP path path || return 1
     fi
-    if [ -n "$path" ]; then
-        if [ -d "$path" ]; then
+    if [[ -n $path ]]; then
+        if [[ -d $path ]]; then
             dir="$path"
-        elif [ -f "$path" ]; then
+        elif [[ -f $path ]]; then
             dir="${path%/*}"
         else
             echo 'usage: remote [path] [git_ref]' >&2
             return 1
         fi
-        # conver to absolute path
-        [ "${dir:0:1}" != '/' ] && dir="$PWD/$path"
+        # convert to absolute path
+        [[ $dir != /* ]] && dir="$PWD/$path"
     fi
 
     BASHGIT_CHECK_REPO "$dir" && BASHGIT_CHECK_ORIGIN || return 1
@@ -530,28 +530,28 @@ remote() { # print link to the origin remote's online interface
         return 1
     fi
 
-    if [ -n "$ref" ]; then
+    if [[ -n $ref ]]; then
         BASHGIT_HASH="$(git rev-parse "$ref")"
-        [ $? -ne 0 ] && return 1
+        [[ $? != 0 ]] && return 1
     else
         BASHGIT_CHECK_COMMIT
     fi
 
     local relpath
-    if [ -n "$path" ]; then
+    if [[ -n $path ]]; then
         # TODO: use _PATH_REMOVE_DOTS, implement /./ removal
         relpath="$(realpath --relative-to="$BASHGIT_REPO" "$path")"
-        [ "$relpath" == '.' ] && relpath=
+        [[ $relpath == . ]] && relpath=
         # path is inside the repo by construction
         # path determines where the repo is found
     fi
 
     local url
-    case "${BASHGIT_REMOTES["${m[0]}"]}" in
+    case "${BASHGIT_REMOTES[${m[0]}]}" in
         github)
             url="https://${m[0]}/${m[1]}${m[2]}/${m[3]}"
-            if [ -v BASHGIT_HASH ]; then
-                if [ -n "$relpath" ]; then
+            if [[ -v BASHGIT_HASH ]]; then
+                if [[ -n $relpath ]]; then
                     url+="/blob/$BASHGIT_HASH/$relpath"
                 else
                     url+="/tree/$BASHGIT_HASH"
@@ -561,24 +561,24 @@ remote() { # print link to the origin remote's online interface
             ;;
         bitbucket)
             url="https://${m[0]}/${m[1]}"
-            if [ "${m[2]:0:1}" == '~' ]; then
+            if [[ ${m[2]:0:1} == ~ ]]; then
                 url+="users/${m[2]:1}"
             else
                 url+="projects/${m[2]}"
             fi
             url+="/repos/${m[3]}/browse"
-            [ -n "$relpath" ] && url+="/$relpath"
-            [ -v BASHGIT_HASH ] && url+="?at=$BASHGIT_HASH"
+            [[ -n $relpath ]] && url+="/$relpath"
+            [[ -v BASHGIT_HASH ]] && url+="?at=$BASHGIT_HASH"
             echo "$url"
             ;;
         gitlab)
             url="https://${m[0]}/${m[1]}${m[2]}/${m[3]}"
-            [ -v BASHGIT_HASH ] && url+="/-/blob/$BASHGIT_HASH"
-            [ -n "$relpath" ] && url+="/$relpath"
+            [[ -v BASHGIT_HASH ]] && url+="/-/blob/$BASHGIT_HASH"
+            [[ -n $relpath ]] && url+="/$relpath"
             echo "$url"
             ;;
         *)
-            echo "Unexpected origin host type \"${BASHGIT_REMOTES["${m[0]}"]}\"" \
+            echo "Unexpected origin host type \"${BASHGIT_REMOTES[${m[0]}]}\"" \
                  "for host \"${m[0]}\"" >&2
             return 1
             ;;
