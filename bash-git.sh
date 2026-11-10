@@ -330,28 +330,35 @@ BASHGIT_LIST_HEADS() {
     fi
 }
 
+_sm_options='bopruxh'
 sm() { # navigate git submodules
-    local OPTIND=1 OPTARG OPTERR
     local -A opts
-    while getopts ':bopruxh' opt; do
+    local OPTIND=1 OPTARG OPTERR opt
+    while getopts ":$_sm_options" opt; do
         case "$opt" in
-            b | o | p | r | u | x) opts[$opt]=1 ;;
             h) break ;;
             \?) opt=h; echo "unexpected option -$OPTARG" >&2; break ;;
+            *) opts[$opt]=1 ;;
         esac
     done
 
     if [[ $opt == h || "${opts[b]}${opts[r]}${opts[u]}" > 1 ]]; then
         [[ $opt != h ]] && echo "conflicting options specified: ${!opts[@]}" >&2
-        echo 'usage: sm [-b] [-o] [-p] [-r] [-u] [-x] [-h]
+        echo 'usage: sm [option...] [argument...]
 options:
-  -b: print local branches in all submodules
-  -o: include origin in the list
-  -p: print list of submodules
-  -r: run command for every submodule recursively
+  -b: list local branches in all submodules
+  -b [name...]: list submodules and branches matching the names
+
   -u: update all submodules
   -u [submodule...]: update specified submodules
-  -x: start at current repo rather than the super repo
+
+  -r [command...]: run command for every submodule
+
+  -x: start at the current repo instead of the super repo
+
+  -o: include origin in the list of submodules
+  -p: print the list of submodules (i.e. do not pipe to fzf)
+
   -h: print this help message and exit'
         return 1
     fi
@@ -360,14 +367,23 @@ options:
 
     BASHGIT_CHECK_REPO || return 1
 
-    if [[ -v opts[u] ]]; then # update submodules
-        (( $# == 0 )) && set -- --recursive
-        git submodule update --init "$@"
-        return
-    fi
-
     local repo
     [[ -v opts[x] ]] && repo="$BASHGIT_REPO" || repo="$BASHGIT_SUPER"
+
+    if [[ -v opts[u] ]]; then # update submodules
+        local cmd=(git submodule update --init)
+        local arg rec=1
+        for arg in "$@"; do
+            if [[ $arg != -* ]]; then
+                rec=
+                break
+            fi
+        done
+        [[ -n $rec ]] && cmd+=(--recursive)
+        cmd+=("$@")
+        (cd "$repo"; echo "$PWD"; echo "${cmd[@]}"; "${cmd[@]}")
+        return
+    fi
 
     if [[ -v opts[b] ]]; then # branches
         local -a full
@@ -435,7 +451,7 @@ options:
     if [[ ! -v opts[p] ]] && command -v fzf &> /dev/null; then
         local x="$(printf '%s\n' "${sm_modules[@]}" | fzf -i -q "$1")"
         if [[ -n $x ]]; then
-            [[ -v opts[o] ]] && x="${x#* }"
+            [[ -v opts[o] ]] && x="${x#* }" # cut off origin prefix
             cd "$x"
         fi
     else
@@ -447,8 +463,28 @@ options:
 # $2: current word
 # $3: preceding word
 _complete_sm() {
-    [[ $2 == -* ]] && COMPREPLY=($(compgen -W '-o -p -r -u -x -h' -- "$2"))
-    # COMPREPLY=($(compgen -W "$(br)" -- "$2"))
+    if [[ $2 == -* ]]; then
+        local c opts
+        while IFS=':' read -r -n1 c; do
+            [[ -n $c ]] && opts+="-$c "
+        done <<< "$_sm_options"
+        COMPREPLY=($(compgen -W "$opts" -- "$2"))
+    else
+        local -A opts
+        local OPTIND=1 OPTARG OPTERR opt
+        while getopts ":$_sm_options" opt "${COMP_WORDS[@]:1}"; do
+            opts[$opt]=1
+        done
+
+        [[ "${opts[b]}${opts[r]}${opts[u]}" > 1 ]] && return 1
+
+        if [[ -v opts[b] ]]; then
+            COMPREPLY=($(compgen -W "$(sm -b ${opts[x]:+-x})" -- "$2"))
+        elif [[ -v opts[u] ]]; then
+            # TODO
+            :
+        fi
+    fi
 }
 complete -F _complete_sm sm
 
@@ -611,7 +647,7 @@ amend() {
             e) edit=1 ;;
             d) args+=('--date=now') ;;
             p) push=1 ;;
-            h) echo 'usage: amend [-a] [-e] [-d] [-p] [-h]
+            h) echo 'usage: amend [option...]
 options:
   -a: `commit --all`
   -e: no `commit --no-edit`
