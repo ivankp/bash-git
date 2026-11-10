@@ -310,34 +310,42 @@ super() {
     BASHGIT_CHECK_REPO && cd "$BASHGIT_SUPER"
 }
 
-gl() {
-    local OPTIND=1 OPTARG OPTERR opt n=8
-    while getopts ':cn:' opt; do
-        case "$opt" in
-            c) echo "$(git rev-list --count HEAD) commits" ;;
-            n) n="${OPTARG}" ;;
-        esac
+BASHGIT_LIST_HEADS_R() {
+    local f
+    for f in "$2"/*; do
+        if [[ -d $f ]]; then
+            BASHGIT_LIST_HEADS_R "$1" "$f"
+        else
+            full+=("${f#"$heads/"} $1")
+            names["${f##*/}"]=1
+        fi
     done
-    shift $((OPTIND - 1))
+}
 
-    git log -n"$n" --date=relative --format="$BASHGIT_LOG_FORMAT" "$@"
+BASHGIT_LIST_HEADS() {
+    local git="$1/.git"
+    if BASHGIT_RESOLVE_GIT git; then
+        local heads="$git/refs/heads"
+        BASHGIT_LIST_HEADS_R "$1" "$heads"
+    fi
 }
 
 sm() { # navigate git submodules
     local OPTIND=1 OPTARG OPTERR
     local -A opts
-    while getopts ':opruxh' opt; do
+    while getopts ':bopruxh' opt; do
         case "$opt" in
-            o | p | r | u | x) opts[$opt]=1 ;;
+            b | o | p | r | u | x) opts[$opt]=1 ;;
             h) break ;;
             \?) opt=h; echo "unexpected option -$OPTARG" >&2; break ;;
         esac
     done
 
-    if [[ $opt == h || "${opts[r]}${opts[u]}" > 1 ]]; then
+    if [[ $opt == h || "${opts[b]}${opts[r]}${opts[u]}" > 1 ]]; then
         [[ $opt != h ]] && echo "conflicting options specified: ${!opts[@]}" >&2
-        echo 'usage: sm [-o] [-p] [-r] [-u] [-x] [-h]
+        echo 'usage: sm [-b] [-o] [-p] [-r] [-u] [-x] [-h]
 options:
+  -b: print local branches in all submodules
   -o: include origin in the list
   -p: print list of submodules
   -r: run command for every submodule recursively
@@ -360,6 +368,41 @@ options:
 
     local repo
     [[ -v opts[x] ]] && repo="$BASHGIT_REPO" || repo="$BASHGIT_SUPER"
+
+    if [[ -v opts[b] ]]; then # branches
+        local -a full
+        local -A names
+
+        local nullglob
+        if ! shopt -q nullglob; then
+            nullglob=1
+            shopt -s nullglob
+        fi
+
+        BASHGIT_MODULES BASHGIT_LIST_HEADS "$repo"
+
+        [[ -n $nullglob ]] && shopt -u nullglob
+
+        local x
+        if (( $# == 0 )); then
+            # If no arguments, print list of branch suffixes
+            for x in "${!names[@]}"; do
+                echo "$x"
+            done
+        else
+            # For each argument, print all matching branches and modules
+            local re
+            for x in "$@"; do
+                re="^([^[:blank:]]*/)?$x (.*)"
+                for x in "${full[@]}"; do
+                    if [[ $x =~ $re ]]; then
+                        echo "$x"
+                    fi
+                done
+            done
+        fi
+        return
+    fi
 
     if [[ -v opts[r] ]]; then # run a command for each submodules
         local -a cmd
@@ -400,127 +443,14 @@ options:
     fi
 }
 
-_complete_sm() {
-    local comp
-    if [[ $2 == -* ]]; then
-        comp='-o -p -r -u -x -h'
-    # else
-    #     local -A opts
-    #     local word
-    #     for word in "${COMP_WORDS[@]}"; do
-    #         [[ $word == -[opruxh] ]] && opts[${word:1:1}]=1
-    #     done
-    #     [[ -v opts[h] || "${opts[r]}${opts[u]}" > 1 ]] && return 1
-    fi
-    COMPREPLY=($(compgen -W "$comp" -- "$2"))
-}
-complete -F _complete_sm sm
-
-topic() {
-    (( $# < 2 )) && BASHGIT_CHECK_REPO || return 1
-
-    local branch="$BASHGIT_BRANCH"
-    if [[ -z $branch ]]; then # HEAD does not point to a branch
-        BASHGIT_CHECK_PARENT && [[ -f "$BASHGIT_PARENT/.gitmodules" ]] || return 1
-
-        # Get branch name from .gitmodules
-        branch=
-        local line last path s
-        local re_submodule='^\[submodule[[:blank:]]'
-        local re_value='^(path|branch)[[:blank:]]*=[[:blank:]]*(.*[^[:space:]])'
-
-        while read -r line || last=1; do
-            if [[ -n $s && $line =~ $re_value ]]; then
-                declare "${BASH_REMATCH[1]}=${BASH_REMATCH[2]}"
-            fi
-            if [[ -n $last || $line == '['* ]]; then
-                if [[ -n $path && $BASHGIT_PARENT/$path -ef $BASHGIT_REPO ]]; then
-                    break
-                else
-                    path=
-                    branch=
-                fi
-                [[ $line =~ $re_submodule ]] && s=1 || s=
-            fi
-            [[ -n $last ]] && break
-        done < "$BASHGIT_PARENT/.gitmodules"
-
-        [[ -z $branch ]] && return 1
-    fi
-
-    [[ $branch =~ ^topic/(.+)/.+ ]] && branch="${BASH_REMATCH[1]}"
-
-    if (( $# == 1 )); then
-        git switch -c "topic/$branch/$1"
-    else
-        echo "git switch -c topic/$branch/"
-    fi
-}
-
-BASHGIT_LIST_HEADS_R() {
-    local f
-    for f in "$2"/*; do
-        if [[ -d $f ]]; then
-            BASHGIT_LIST_HEADS_R "$1" "$f"
-        else
-            full+=("${f#"$heads/"} $1")
-            names["${f##*/}"]=1
-        fi
-    done
-}
-
-BASHGIT_LIST_HEADS() {
-    local git="$1/.git"
-    if BASHGIT_RESOLVE_GIT git; then
-        local heads="$git/refs/heads"
-        BASHGIT_LIST_HEADS_R "$1" "$heads"
-    fi
-}
-
-br() { # work with submodule branches
-    BASHGIT_CHECK_REPO || return 1
-
-    local -a full
-    local -A names
-
-    local nullglob
-    if ! shopt -q nullglob; then
-        nullglob=1
-        shopt -s nullglob
-    fi
-
-    BASHGIT_MODULES BASHGIT_LIST_HEADS "$BASHGIT_SUPER"
-
-    [[ -n $nullglob ]] && shopt -u nullglob
-
-    local x
-
-    if (( $# == 0 )); then
-        # If no arguments, print list of branch suffixes
-        for x in "${!names[@]}"; do
-            echo "$x"
-        done
-    else
-        # For each argument, print all matching branches and modules
-        local re
-        for x in "$@"; do
-            re="^([^[:blank:]]*/)?$x (.*)"
-            for x in "${full[@]}"; do
-                if [[ $x =~ $re ]]; then
-                    echo "$x"
-                fi
-            done
-        done
-    fi
-}
-
 # $1: command name
 # $2: current word
 # $3: preceding word
-_complete_br() {
-    COMPREPLY=($(compgen -W "$(br)" -- "$2"))
+_complete_sm() {
+    [[ $2 == -* ]] && COMPREPLY=($(compgen -W '-o -p -r -u -x -h' -- "$2"))
+    # COMPREPLY=($(compgen -W "$(br)" -- "$2"))
 }
-complete -F _complete_br br
+complete -F _complete_sm sm
 
 remote() { # print link to the origin remote's online interface
     local path="$1" ref="$2" dir
@@ -617,6 +547,60 @@ remote() { # print link to the origin remote's online interface
             return 1
             ;;
     esac
+}
+
+topic() {
+    (( $# < 2 )) && BASHGIT_CHECK_REPO || return 1
+
+    local branch="$BASHGIT_BRANCH"
+    if [[ -z $branch ]]; then # HEAD does not point to a branch
+        BASHGIT_CHECK_PARENT && [[ -f "$BASHGIT_PARENT/.gitmodules" ]] || return 1
+
+        # Get branch name from .gitmodules
+        branch=
+        local line last path s
+        local re_submodule='^\[submodule[[:blank:]]'
+        local re_value='^(path|branch)[[:blank:]]*=[[:blank:]]*(.*[^[:space:]])'
+
+        while read -r line || last=1; do
+            if [[ -n $s && $line =~ $re_value ]]; then
+                declare "${BASH_REMATCH[1]}=${BASH_REMATCH[2]}"
+            fi
+            if [[ -n $last || $line == '['* ]]; then
+                if [[ -n $path && $BASHGIT_PARENT/$path -ef $BASHGIT_REPO ]]; then
+                    break
+                else
+                    path=
+                    branch=
+                fi
+                [[ $line =~ $re_submodule ]] && s=1 || s=
+            fi
+            [[ -n $last ]] && break
+        done < "$BASHGIT_PARENT/.gitmodules"
+
+        [[ -z $branch ]] && return 1
+    fi
+
+    [[ $branch =~ ^topic/(.+)/.+ ]] && branch="${BASH_REMATCH[1]}"
+
+    if (( $# == 1 )); then
+        git switch -c "topic/$branch/$1"
+    else
+        echo "git switch -c topic/$branch/"
+    fi
+}
+
+gl() {
+    local OPTIND=1 OPTARG OPTERR opt n=8
+    while getopts ':cn:' opt; do
+        case "$opt" in
+            c) echo "$(git rev-list --count HEAD) commits" ;;
+            n) n="${OPTARG}" ;;
+        esac
+    done
+    shift $((OPTIND - 1))
+
+    git log -n"$n" --date=relative --format="$BASHGIT_LOG_FORMAT" "$@"
 }
 
 amend() {
