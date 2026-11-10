@@ -324,22 +324,19 @@ gl() {
 }
 
 sm() { # navigate git submodules
-    local OPTIND=1 OPTARG OPTERR o p run u repo
+    local OPTIND=1 OPTARG OPTERR
+    local -A opts
     while getopts ':opruxh' opt; do
         case "$opt" in
-            o) o=1 ;;
-            p) p=1 ;;
-            r) run=1 ;;
-            u) u=1 ;;
-            x) repo=1 ;;
+            o | p | r | u | x) opts[$opt]=1 ;;
             h) break ;;
             \?) opt=h; echo "unexpected option -$OPTARG" >&2; break ;;
         esac
     done
 
-    if [[ $opt == h || "$run$u" > 1 ]]; then
-        [[ $opt != h ]] && echo 'conflicting options specified' >&2
-        echo 'usage: sm [-o] [-r] [-u] [-x] [-h]
+    if [[ $opt == h || "${opts[r]}${opts[u]}" > 1 ]]; then
+        [[ $opt != h ]] && echo "conflicting options specified: ${!opts[@]}" >&2
+        echo 'usage: sm [-o] [-p] [-r] [-u] [-x] [-h]
 options:
   -o: include origin in the list
   -p: print list of submodules
@@ -355,18 +352,19 @@ options:
 
     BASHGIT_CHECK_REPO || return 1
 
-    [[ -n $repo ]] && repo="$BASHGIT_REPO" || repo="$BASHGIT_SUPER"
-
-    if [[ -n $u ]]; then # update submodules
-        (( $# == 0 )) && set -- '--recursive'
+    if [[ -v opts[u] ]]; then # update submodules
+        (( $# == 0 )) && set -- --recursive
         git submodule update --init "$@"
         return
     fi
 
-    if [[ -n $run ]]; then # run a command for each submodules
-        run=("$@")
-        (( ${#run[@]} == 0 )) && run=('echo')
-        sm_predicate() { "${run[@]}" "$1"; }
+    local repo
+    [[ -v opts[x] ]] && repo="$BASHGIT_REPO" || repo="$BASHGIT_SUPER"
+
+    if [[ -v opts[r] ]]; then # run a command for each submodules
+        local -a cmd
+        (( $# == 0 )) && cmd=(echo) || cmd=("$@")
+        sm_predicate() { "${cmd[@]}" "$1"; }
         BASHGIT_MODULES sm_predicate "$repo"
         return
     fi
@@ -375,7 +373,7 @@ options:
 
     local sm_modules=()
     local re_origin='(([^/:]+/)?[^/]+)\.git$'
-    if [[ $o == 1 ]]; then
+    if [[ -v opts[o] ]]; then
         sm_predicate() {
             local git="$1/.git"
             if BASHGIT_RESOLVE_GIT git && BASHGIT_CHECK_ORIGIN "$git"; then
@@ -391,31 +389,30 @@ options:
     fi
     BASHGIT_MODULES sm_predicate "$repo"
 
-    if [[ -z $p ]] && command -v fzf &> /dev/null; then
+    if [[ ! -v opts[p] ]] && command -v fzf &> /dev/null; then
         local x="$(printf '%s\n' "${sm_modules[@]}" | fzf -i -q "$1")"
-        [[ -n $x ]] && cd "$x"
+        if [[ -n $x ]]; then
+            [[ -v opts[o] ]] && x="${x#* }"
+            cd "$x"
+        fi
     else
         printf '%s\n' "${sm_modules[@]}"
     fi
 }
 
 _complete_sm() {
-    if [ "$COMP_CWORD" -gt 0 ]; then
-        local comp=''
-        local arg="${COMP_WORDS[COMP_CWORD]}"
-        case "${COMP_WORDS[COMP_CWORD-1]}" in
-            -u) #TODO
-                ;;
-            *)
-                case "$arg" in
-                    -*)
-                        comp='-h -u'
-                        ;;
-                esac
-                ;;
-        esac
-        COMPREPLY=($(compgen -W "$comp" -- "$arg"))
+    local comp
+    if [[ $2 == -* ]]; then
+        comp='-o -p -r -u -x -h'
+    # else
+    #     local -A opts
+    #     local word
+    #     for word in "${COMP_WORDS[@]}"; do
+    #         [[ $word == -[opruxh] ]] && opts[${word:1:1}]=1
+    #     done
+    #     [[ -v opts[h] || "${opts[r]}${opts[u]}" > 1 ]] && return 1
     fi
+    COMPREPLY=($(compgen -W "$comp" -- "$2"))
 }
 complete -F _complete_sm sm
 
