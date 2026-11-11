@@ -310,6 +310,19 @@ super() {
     BASHGIT_CHECK_REPO && cd "$BASHGIT_SUPER"
 }
 
+gl() {
+    local OPTIND=1 OPTARG OPTERR opt n=8
+    while getopts ':cn:' opt; do
+        case "$opt" in
+            c) echo "$(git rev-list --count HEAD) commits" ;;
+            n) n="${OPTARG}" ;;
+        esac
+    done
+    shift $((OPTIND - 1))
+
+    git log -n"$n" --date=relative --format="$BASHGIT_LOG_FORMAT" "$@"
+}
+
 BASHGIT_LIST_HEADS_R() {
     local f
     for f in "$2"/*; do
@@ -624,19 +637,6 @@ topic() {
     else
         echo "git switch -c topic/$branch/"
     fi
-}
-
-gl() {
-    local OPTIND=1 OPTARG OPTERR opt n=8
-    while getopts ':cn:' opt; do
-        case "$opt" in
-            c) echo "$(git rev-list --count HEAD) commits" ;;
-            n) n="${OPTARG}" ;;
-        esac
-    done
-    shift $((OPTIND - 1))
-
-    git log -n"$n" --date=relative --format="$BASHGIT_LOG_FORMAT" "$@"
 }
 
 amend() {
